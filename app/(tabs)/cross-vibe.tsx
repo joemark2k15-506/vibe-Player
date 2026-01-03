@@ -1,3 +1,4 @@
+import SettingsModal from '@/components/SettingsModal';
 import { useTheme } from '@/components/ThemeContext';
 import { AVATARS, DEFAULT_AVATAR } from '@/constants/avatars';
 import { Ionicons } from '@expo/vector-icons';
@@ -5,42 +6,62 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Image, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { Extrapolate, FadeInDown, FadeInRight, interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Dimensions, Image, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, FadeInRight, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// --- Mock Data & Component Configuration ---
+const { width } = Dimensions.get('window');
+const COLUMN_Gap = 12;
+const COLUMN_WIDTH = (width - 40 - COLUMN_Gap) / 2;
+
+// --- Components ---
+
 interface ServiceCardProps {
     name: string;
     icon: any;
-    // Fix: Explicitly type compatible with LinearGradient
     color: readonly [string, string, ...string[]]; 
     isConnected: boolean;
     onConnect: () => void;
     stats?: { label: string; value: string }[];
-    isDark: boolean; // Pass theme mode
+    isDark: boolean;
 }
 
 const ServiceCard = ({ name, icon, color, isConnected, onConnect, stats, isDark }: ServiceCardProps) => {
     const scale = useSharedValue(1);
     
+    // Breathing glow effect
+    const glowOpacity = useSharedValue(0.5);
+
+    React.useEffect(() => {
+        if (isConnected) {
+            glowOpacity.value = withRepeat(
+                withSequence(withTiming(0.8, { duration: 1500 }), withTiming(0.4, { duration: 1500 })),
+                -1,
+                true
+            );
+        } else {
+            glowOpacity.value = withTiming(0);
+        }
+    }, [isConnected]);
+    
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }],
+    }));
+
+    const glowStyle = useAnimatedStyle(() => ({
+        opacity: glowOpacity.value,
     }));
 
     const handlePressIn = () => { scale.value = withSpring(0.98); };
     const handlePressOut = () => { scale.value = withSpring(1); };
 
-    // Dynamic styles for Light/Dark
     const disconnectedColors: readonly [string, string, ...string[]] = isDark 
-        ? ['#333', '#111'] 
-        : ['#F0F0F0', '#FFFFFF'];
+        ? ['#1A1A1A', '#0D0D0D'] 
+        : ['#FFFFFF', '#F0F0F0'];
     
     const textColor = isConnected ? '#fff' : (isDark ? '#fff' : '#000');
-    // Fix: Darker text for light mode
-    const subTextColor = isConnected ? 'rgba(255,255,255,0.7)' : (isDark ? 'rgba(255,255,255,0.5)' : '#444444');
-    const iconBg = isConnected ? 'rgba(255,255,255,0.2)' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)');
-    const iconColor = isConnected ? '#fff' : (isDark ? '#fff' : '#000');
+    const subTextColor = isConnected ? 'rgba(255,255,255,0.8)' : (isDark ? 'rgba(255,255,255,0.5)' : '#666');
+    const iconColor = isConnected ? '#fff' : (isDark ? '#fff' : '#444');
 
     return (
         <TouchableOpacity
@@ -49,36 +70,45 @@ const ServiceCard = ({ name, icon, color, isConnected, onConnect, stats, isDark 
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
         >
-            <Animated.View style={[styles.cardContainer, { 
-                shadowColor: isDark ? '#000' : '#ccc',
-                backgroundColor: isDark ? '#000' : '#fff' // Fallback bg
-            }, animatedStyle]}>
+            <Animated.View style={[styles.cardContainer, animatedStyle]}>
+                {/* Outer Glow for Connected State */}
+                {isConnected && (
+                    <Animated.View style={[StyleSheet.absoluteFill, { borderRadius: 24, zIndex: -1 }, glowStyle]}>
+                         <LinearGradient
+                            colors={color}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={{ flex: 1, borderRadius: 24, opacity: 0.6, margin: -2 }}
+                        />
+                    </Animated.View>
+                )}
+
                 <LinearGradient
                     colors={isConnected ? color : disconnectedColors} 
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={styles.cardGradient}
+                    style={[styles.cardGradient, !isDark && !isConnected && styles.lightCardBorder]}
                 >
                     <View style={styles.cardHeader}>
-                        <View style={[styles.iconContainer, { backgroundColor: iconBg }]}>
-                            <Ionicons name={icon} size={28} color={iconColor} />
+                        <View style={[styles.iconContainer, { backgroundColor: isConnected ? 'rgba(255,255,255,0.2)' : (isDark ? '#333' : '#EEE') }]}>
+                            <Ionicons name={icon} size={24} color={iconColor} />
                         </View>
                         <View style={styles.textContainer}>
                             <Text style={[styles.serviceName, { color: textColor }]}>{name}</Text>
                             <Text style={[styles.statusText, { color: subTextColor }]}>
-                                {isConnected ? 'Connected' : 'Tap to Connect'}
+                                {isConnected ? 'Active' : 'Connect'}
                             </Text>
                         </View>
                         <Switch
                             value={isConnected}
                             onValueChange={onConnect}
-                            trackColor={{ false: isDark ? '#555' : '#ccc', true: 'rgba(255,255,255,0.3)' }}
+                            trackColor={{ false: isDark ? '#333' : '#E0E0E0', true: 'rgba(255,255,255,0.3)' }}
                             thumbColor={'#fff'}
                         />
                     </View>
 
                     {isConnected && stats && (
-                        <View style={[styles.statsContainer, { borderTopColor: 'rgba(255,255,255,0.2)' }]}>
+                        <View style={styles.statsRow}>
                             {stats.map((stat, index) => (
                                 <View key={index} style={styles.statItem}>
                                     <Text style={styles.statValue}>{stat.value}</Text>
@@ -93,52 +123,49 @@ const ServiceCard = ({ name, icon, color, isConnected, onConnect, stats, isDark 
     );
 };
 
-const FeatureItem = ({ icon, label, description, color, isDark }: any) => {
-    // Use Feature Color for Title in Light Mode for visibility & pop
-    const titleColor = isDark ? '#fff' : color;
-    const descColor = isDark ? 'rgba(255,255,255,0.5)' : '#000000';
-    const chevronColor = isDark ? '#666' : '#222';
-    // Solid white bg for Light Mode features to ensure they pop against the page
-    const containerBg = isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF';
-    const containerBorder = isDark ? 'rgba(255,255,255,0.05)' : '#E0E0E0';
-
+const PowerToolCard = ({ icon, label, description, color, isDark, index }: any) => {
+    // Glassmorphism background
+    const bg = isDark ? 'rgba(30,30,40,0.8)' : '#FFFFFF';
+    const border = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+    
     return (
-        <View style={[
-            styles.featureItem, 
-            { 
-                backgroundColor: containerBg, 
-                borderColor: containerBorder,
-                // Add shadow for light mode visibility
-                shadowColor: isDark ? 'transparent' : '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: isDark ? 0 : 0.05,
-                shadowRadius: 4,
-                elevation: isDark ? 0 : 2
-            }
-        ]}>
-            <LinearGradient
-                colors={[color, isDark ? '#111' : '#F5F5F5']}
-                style={styles.featureIconInfo}
-            >
-                 <Ionicons name={icon} size={24} color="#fff" />
-            </LinearGradient>
-            <View style={styles.featureText}>
-                <Text style={[styles.featureTitle, { color: titleColor }]}>{label}</Text>
-                <Text style={[styles.featureDesc, { color: descColor }]}>{description}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={chevronColor} />
-        </View>
-    );
-};
+        <Animated.View entering={FadeInDown.delay(300 + (index * 100)).springify()}>
+            <TouchableOpacity style={[
+                styles.powerCard, 
+                { backgroundColor: bg, borderColor: border },
+                !isDark && styles.lightShadow
+            ]}>
+                <LinearGradient
+                    colors={[color, 'transparent']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[StyleSheet.absoluteFill, { opacity: 0.1 }]}
+                    locations={[0, 0.8]}
+                />
+                
+                <View style={[styles.powerIconCircle, { backgroundColor: color }]}>
+                    <Ionicons name={icon} size={28} color="#fff" />
+                </View>
 
-import SettingsModal from '@/components/SettingsModal';
+                <View style={styles.powerContent}>
+                    <Text style={[styles.powerTitle, { color: isDark ? '#fff' : '#000' }]} numberOfLines={1}>{label}</Text>
+                    <Text style={[styles.powerDesc, { color: isDark ? 'rgba(255,255,255,0.5)' : '#666' }]} numberOfLines={2}>
+                        {description}
+                    </Text>
+                </View>
+                
+                <View style={styles.cardArrow}>
+                    <Ionicons name="arrow-forward" size={16} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)'} />
+                </View>
+            </TouchableOpacity>
+        </Animated.View>
+    )
+}
 
 export default function CrossVibeScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  // Removed conflicting colorScheme hook usage
   
-  // State for mock connections
   const [spotifyConnected, setSpotifyConnected] = useState(false);
   const [ytMusicConnected, setYtMusicConnected] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
@@ -159,34 +186,18 @@ export default function CrossVibeScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
 
-  // Fade effect for smooth clipping
-  const fadeStyle = useAnimatedStyle(() => {
-    return {
-      opacity: interpolate(
-        scrollY.value,
-        [0, 80],
-        [1, 0],
-        Extrapolate.CLAMP
-      ),
-    };
-  });
-
   return (
     <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <SafeAreaView style={{ flex: 1 }} edges={['left', 'right', 'bottom']}>
 
-        {/* 1. Fixed Header */}
+        {/* 1. Header */}
        <Animated.View 
             entering={FadeInDown.delay(100).springify()} 
             style={[
                 styles.header, 
-                { 
-                    backgroundColor: 'transparent',
-                    paddingTop: insets.top + 10,
-                }
+                { paddingTop: insets.top + 70 }
             ]}
        >
-            {/* Avatar */}
              <TouchableOpacity 
                 onPress={() => router.push('/profile')}
                 style={[styles.avatarContainer, { borderColor: colors.primary }]}
@@ -197,39 +208,23 @@ export default function CrossVibeScreen() {
                 />
             </TouchableOpacity>
 
-            <View style={{ flex: 1, paddingHorizontal: 12, justifyContent: 'center' }}>
+            <View style={{ flex: 1, paddingHorizontal: 16 }}>
                 <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>Cross Vibe</Text>
-                <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                    Unify your music universe.
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+                    Nexus Control Center
                 </Text>
             </View>
 
             <TouchableOpacity 
-                style={[styles.settingsButton, { 
-                    backgroundColor: colors.surface,
-                    width: 44, 
-                    height: 44, 
-                    borderRadius: 14, 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                    borderWidth: 1, 
-                    borderColor: colors.border 
-                }]}
+                style={[styles.settingsButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#F0F0F0' }]}
                 onPress={() => setIsSettingsVisible(true)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
                 <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
             </TouchableOpacity>
        </Animated.View>
 
-       {/* 2. Clipping Zone */}
-       <View style={{ 
-           flex: 1, 
-           marginTop: insets.top + 130, 
-           overflow: 'hidden',
-           backgroundColor: 'transparent' 
-       }}>
-          
+       {/* 2. Scroll Content */}
+       <View style={{ flex: 1, marginTop: insets.top + 140 }}>
           <Animated.ScrollView 
                contentContainerStyle={styles.scrollContent} 
                showsVerticalScrollIndicator={false}
@@ -237,15 +232,15 @@ export default function CrossVibeScreen() {
                scrollEventThrottle={16}
            >
             
-            {/* Service Cards */}
-            <Animated.View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Integrations</Text>
+            {/* Integrations Section */}
+            <View style={styles.section}>
+                <Text style={[styles.sectionHeading, { color: colors.text }]}>Service Status</Text>
                 
                 <Animated.View entering={FadeInRight.delay(200).springify()}>
                     <ServiceCard 
                         name="Spotify"
                         icon="musical-notes"
-                        color={['#1DB954', '#191414']}
+                        color={['#1DB954', '#1ed760']}
                         isConnected={spotifyConnected}
                         onConnect={() => setSpotifyConnected(!spotifyConnected)}
                         stats={[
@@ -260,7 +255,7 @@ export default function CrossVibeScreen() {
                     <ServiceCard 
                         name="YouTube Music"
                         icon="play-circle" 
-                        color={['#FF0000', '#282828']}
+                        color={['#FF0000', '#FF4E50']}
                         isConnected={ytMusicConnected}
                         onConnect={() => setYtMusicConnected(!ytMusicConnected)}
                         stats={[
@@ -270,43 +265,48 @@ export default function CrossVibeScreen() {
                         isDark={isDark}
                     />
                 </Animated.View>
-            </Animated.View>
+            </View>
 
-            {/* Power Features */}
+            {/* Power Tools Grid */}
             <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Power Tools</Text>
+                <Text style={[styles.sectionHeading, { color: colors.text }]}>Power Tools</Text>
                 
-                <Animated.View entering={FadeInDown.delay(400).springify()} style={styles.featuresGrid}>
-                    <FeatureItem 
+                <View style={styles.gridContainer}>
+                     <PowerToolCard 
+                        index={0}
                         icon="sync" 
                         label="Sync Library" 
-                        description="Keep playlists in sync."
+                        description="Auto-sync playlists across platforms."
                         color="#4A90E2"
                         isDark={isDark}
                     />
-                    <FeatureItem 
+                     <PowerToolCard 
+                        index={1}
                         icon="swap-horizontal" 
                         label="Transfer" 
-                        description="Move songs between apps."
+                        description="Move songs between apps instantly."
                         color="#F5A623"
                         isDark={isDark}
                     />
-                     <FeatureItem 
+                     <PowerToolCard 
+                        index={2}
                         icon="search" 
                         label="Universal Search" 
-                        description="Find songs everywhere."
+                        description="Find any track, anywhere."
                         color="#BD10E0"
                         isDark={isDark}
                     />
-                     <FeatureItem 
+                     <PowerToolCard 
+                        index={3}
                         icon="flash" 
                         label="Vibe Match" 
-                        description="AI playlist generator."
-                        color="#50E3C2"
+                        description="AI-generated playlists for your mood."
+                        color="#00E676"
                         isDark={isDark}
                     />
-                </Animated.View>
+                </View>
             </View>
+
        </Animated.ScrollView>
         </View>
         <SettingsModal visible={isSettingsVisible} onClose={() => setIsSettingsVisible(false)} />
@@ -320,35 +320,36 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-      paddingBottom: 100,
-      paddingTop: 30, // Reduced from 160
+      paddingBottom: 120,
+      paddingTop: 20,
   },
   header: {
       position: 'absolute',
-      top: 70, 
+      top: 0, 
       left: 0,
       right: 0,
       zIndex: 90,
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center', 
       paddingHorizontal: 20,
-      paddingBottom: 30,
+      paddingBottom: 20,
   },
   title: {
-      fontSize: 24,
-      fontWeight: '900',
+      fontSize: 32,
+      fontWeight: '800',
       letterSpacing: 0.5,
+      fontFamily: 'Kanit_700Bold',
   },
   subtitle: {
-      fontSize: 13,
+      fontSize: 14,
       opacity: 0.7,
-      marginTop: 0,
+      marginTop: 2,
+      fontFamily: 'Kanit_400Regular',
   },
   avatarContainer: {
-      width: 58,
-      height: 58,
-      borderRadius: 22,
+      width: 50,
+      height: 50,
+      borderRadius: 18,
       borderWidth: 2,
       overflow: 'hidden',
   },
@@ -357,101 +358,142 @@ const styles = StyleSheet.create({
       height: '100%',
   },
   settingsButton: {
-    padding: 8,
-    borderRadius: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   section: {
-      marginBottom: 20,
+      marginBottom: 30,
       paddingHorizontal: 20,
   },
-  sectionTitle: {
+  sectionHeading: {
       fontSize: 20,
       fontWeight: '700',
-      marginBottom: 15,
+      marginBottom: 16,
       opacity: 0.9,
+      fontFamily: 'Kanit_700Bold',
   },
+  
+  // Card Styles
   cardContainer: {
-      marginBottom: 25,
+      marginBottom: 20,
       borderRadius: 24,
+      shadowColor: '#000',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.3,
-      shadowRadius: 10,
-      elevation: 6,
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 5,
   },
   cardGradient: {
-      padding: 20,
+      padding: 16,
       borderRadius: 24,
-      minHeight: 100,
+      minHeight: 90,
+  },
+  lightCardBorder: {
+      borderWidth: 1,
+      borderColor: '#E0E0E0',
   },
   cardHeader: {
       flexDirection: 'row',
       alignItems: 'center',
   },
   iconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 15,
+      marginRight: 14,
   },
   textContainer: {
       flex: 1,
   },
   serviceName: {
       fontSize: 18,
-      fontWeight: 'bold',
+      fontWeight: '700',
+      fontFamily: 'Kanit_700Bold',
   },
   statusText: {
-      fontSize: 14,
+      fontSize: 12,
+      fontWeight: '500',
   },
-  statsContainer: {
+  statsRow: {
       flexDirection: 'row',
-      marginTop: 20,
+      marginTop: 16,
+      paddingTop: 12,
       borderTopWidth: 1,
-      paddingTop: 15,
+      borderTopColor: 'rgba(255,255,255,0.2)',
   },
   statItem: {
-      marginRight: 30,
+      marginRight: 24,
   },
   statValue: {
       fontSize: 20,
       fontWeight: '800',
       color: '#fff',
+      fontFamily: 'Kanit_700Bold',
   },
   statLabel: {
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.6)',
+      fontSize: 10,
+      color: 'rgba(255,255,255,0.7)',
       textTransform: 'uppercase',
       fontWeight: '600',
+      marginTop: 2,
   },
-  featuresGrid: {
-      gap: 12,
-  },
-  featureItem: {
+  
+  // Grid Styles
+  gridContainer: {
       flexDirection: 'row',
-      alignItems: 'center',
-      padding: 16,
-      borderRadius: 20,
-      borderWidth: 1,
+      flexWrap: 'wrap',
+      gap: COLUMN_Gap,
   },
-  featureIconInfo: {
-      width: 44,
-      height: 44,
-      borderRadius: 14,
+  powerCard: {
+      width: COLUMN_WIDTH,
+      height: COLUMN_WIDTH * 1.1, 
+      borderRadius: 24,
+      padding: 16,
+      justifyContent: 'space-between',
+      borderWidth: 1,
+      overflow: 'hidden',
+  },
+  lightShadow: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 3,
+      backgroundColor: '#fff',
+      borderWidth: 0,
+  },
+  powerIconCircle: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 16,
+      marginBottom: 10,
   },
-  featureText: {
+  powerContent: {
       flex: 1,
+      justifyContent: 'center',
   },
-  featureTitle: {
+  powerTitle: {
       fontSize: 16,
       fontWeight: '700',
-      marginBottom: 2,
+      marginBottom: 4,
+      fontFamily: 'Kanit_700Bold',
   },
-  featureDesc: {
-      fontSize: 13,
+  powerDesc: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontFamily: 'Kanit_400Regular',
   },
+  cardArrow: {
+      position: 'absolute',
+      top: 16,
+      right: 16,
+  }
 });
+

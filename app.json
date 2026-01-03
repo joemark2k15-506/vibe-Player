@@ -5,7 +5,7 @@
     "slug": "vibe-player",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/img2.png",
+    "icon": "./assets/images/vibe_icon.png",
     "scheme": "joeproj",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
@@ -24,8 +24,8 @@
         "ACCESS_MEDIA_LOCATION"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/img2.png",
+        "backgroundColor": "#120924",
+        "foregroundImage": "./assets/images/vibe_icon.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -33,7 +33,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/vibe_icon.png"
     },
     "plugins": [
       "expo-router",
@@ -41,7 +41,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/image1.jpg",
+          "image": "./assets/images/vibe_icon.png",
           "resizeMode": "cover",
           "backgroundColor": "#000000"
         }

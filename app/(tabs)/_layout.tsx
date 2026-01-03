@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +14,7 @@ const { Navigator } = createMaterialTopTabNavigator();
 // Export as a Layout Component for Expo Router to use
 export const MaterialTopTabs = withLayoutContext(Navigator);
 
+import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -35,14 +35,14 @@ const TabItem = ({ route, index, state, descriptors, navigation, showAndAutoHide
         showAndAutoHide();
     };
 
-    let iconName;
+    let iconName: keyof typeof Ionicons.glyphMap;
     let label = options.title || route.name;
     
-    if (route.name === 'index') { iconName = 'home'; label = 'HOME'; }
-    else if (route.name === 'search') { iconName = 'search'; label = 'SEARCH'; }
-    else if (route.name === 'cross-vibe') { iconName = 'planet'; label = 'VIBE'; }
-    else if (route.name === 'profile') { iconName = 'person'; label = 'ME'; }
-    else iconName = 'ellipse';
+    if (route.name === 'index') { iconName = isFocused ? 'home' : 'home-outline'; label = 'HOME'; }
+    else if (route.name === 'search') { iconName = isFocused ? 'search' : 'search-outline'; label = 'SEARCH'; }
+    else if (route.name === 'cross-vibe') { iconName = isFocused ? 'flash' : 'flash-outline'; label = 'VIBE'; }
+    else if (route.name === 'profile') { iconName = isFocused ? 'person' : 'person-outline'; label = 'ME'; }
+    else { iconName = 'alert-circle-outline'; }
 
     return (
         <TouchableOpacity
@@ -67,16 +67,22 @@ const TabItem = ({ route, index, state, descriptors, navigation, showAndAutoHide
                         end={{ x: 1, y: 0 }}
                         style={styles.activeTabGradient}
                     >
-                        <Ionicons name={iconName as any} size={16} color="#FFF" style={{ marginRight: 4 }} />
+                         <Ionicons
+                            name={iconName}
+                            size={20}
+                            color="#fff"
+                            style={{ marginRight: 4 }}
+                        />
                         <Text numberOfLines={1} style={styles.activeLabel}>
                             {label}
                         </Text>
                     </LinearGradient>
                 ) : (
-                    <Ionicons 
-                        name={iconName as any} 
-                        size={24} 
-                        color={isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.8)"} 
+                    <Ionicons
+                        name={iconName}
+                        size={24}
+                        color={isDark ? '#fff' : '#000'}
+                        style={{ opacity: 0.7 }}
                     />
                 )}
             </View>
