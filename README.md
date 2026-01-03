@@ -1,50 +1,83 @@
-# Welcome to your Expo app 👋
+# Vibe Player 🎵
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+_(A High-Fidelity Audiophile React Native Music Player)_
 
-## Get started
+Welcome to **Vibe Player**, an advanced mobile music application built with React Native & Expo, focusing on premium UI design and high-performance audio engine capabilities.
 
-1. Install dependencies
+## ✨ Key Features
+
+### 🚀 Advanced Audio Engine
+
+- **FFmpeg Integration**: Built-in `ffmpeg-kit-react-native` pipeline to transcode high-res audio (ALAC/M4A) to MP3 on-the-fly, ensuring 100% playback compatibility.
+- **Metadata Parsing**: Custom binary parser for extracting ID3 tags and cover art from large files without OOM crashes.
+- **Smart Caching**: Persistent metadata caching layer for instant library loading.
+
+### 🎨 Premium UI/UX
+
+- **Interactive Animations**: Custom code-based animations (Sun, Moon, Cloud) using `react-native-reanimated` (No Lottie files!).
+- **Immersive Mode**: Dynamic background color extraction (`react-native-image-colors`) that adapts the UI to the current song's album art.
+- **Glassmorphism**: Optimized translucent effects (Solid Glass on Android 12+ for performance, Blur on iOS).
+- **Music Director Info**: Displays director details alongside artist information.
+
+### ⚡ Performance
+
+- **Optimized Rendering**: Re-architected rendering for 60fps scrolling on Android.
+- **Marquee Titles**: Scrolling text for long song names in the MiniPlayer.
+
+## 🛠 Tech Stack
+
+- **Core**: React Native (0.76), Expo (SDK 52), TypeScript
+- **Audio**: Expo AV, FFmpeg-Kit (Full-GPL)
+- **Animations**: React Native Reanimated 3
+- **Navigation**: Expo Router (File-based)
+- **State Management**: React Context + Hooks
+
+## 📦 Installation & Setup
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/joemark2k15-506/vibe-Player.git
+   cd vibe-Player
+   ```
+
+2. **Install dependencies**
 
    ```bash
    npm install
    ```
 
-2. Start the app
+3. **Prebuild (Crucial for FFmpeg)**
+   Since we use custom native code for FFmpeg, you **must** run prebuild:
 
    ```bash
-   npx expo start
+   npx expo prebuild --clean --platform android
    ```
 
-In the output, you'll find options to open the app in a
+4. **Run on Android**
+   ```bash
+   npx expo run:android
+   ```
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 📱 Building Release APK
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+To build a standalone APK for testing:
 
 ```bash
-npm run reset-project
+cd android
+./gradlew assembleRelease
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+The APK will be generated at: `android/app/build/outputs/apk/release/app-release.apk`
 
-## Learn more
+## 🤝 Contributing
 
-To learn more about developing your project with Expo, look at the following resources:
+1. Fork the repo
+2. Create feature branch
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch
+5. Open a Pull Request
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+---
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+_Built with ❤️ by Joe_
