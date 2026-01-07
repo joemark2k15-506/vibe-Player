@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Dimensions, Image, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -128,13 +128,25 @@ const PowerToolCard = ({ icon, label, description, color, isDark, index }: any) 
     const bg = isDark ? 'rgba(30,30,40,0.8)' : '#FFFFFF';
     const border = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
     
+    const handlePress = () => {
+        Alert.alert(
+            "Coming Soon", 
+            `${label} is currently under development. Stay tuned!`,
+            [{ text: "OK", style: "default" }]
+        );
+    };
+
     return (
         <Animated.View entering={FadeInDown.delay(300 + (index * 100)).springify()}>
-            <TouchableOpacity style={[
-                styles.powerCard, 
-                { backgroundColor: bg, borderColor: border },
-                !isDark && styles.lightShadow
-            ]}>
+            <TouchableOpacity 
+                style={[
+                    styles.powerCard, 
+                    { backgroundColor: bg, borderColor: border },
+                    !isDark && styles.lightShadow
+                ]}
+                onPress={handlePress}
+                activeOpacity={0.7}
+            >
                 <LinearGradient
                     colors={[color, 'transparent']}
                     start={{ x: 0, y: 0 }}

@@ -162,6 +162,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if(fresh) {
         setSongs(LibraryManager.getAllSongs());
         setDirectorCards(mapDirectorsToCards(LibraryManager.getDirectors()));
+        
+        // AUTO-PLAY: First Run Simulation
+        const all = LibraryManager.getAllSongs();
+        // Only if library WAS empty before this scan
+        if (all.length > 0 && songsRef.current.length === 0) {
+             console.log("[PlayerContext] First Run: Auto-playing after scan...");
+             // Small delay to allow UI to settle after popup hide
+             setTimeout(() => {
+                 play(all[0]);
+             }, 1000);
+        }
     }
   };
 
@@ -451,6 +462,35 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // User Profile State
+  const [userName, setUserNameState] = useState('User');
+  const [avatarId, setAvatarIdState] = useState('1');
+
+  useEffect(() => {
+      loadUserProfile();
+  }, []);
+
+  const loadUserProfile = async () => {
+      try {
+          const savedName = await AsyncStorage.getItem('user_name');
+          const savedAvatar = await AsyncStorage.getItem('user_avatar');
+          if (savedName) setUserNameState(savedName);
+          if (savedAvatar) setAvatarIdState(savedAvatar);
+      } catch (e) {
+          console.error("Failed to load user profile", e);
+      }
+  };
+
+  const setUserName = async (name: string) => {
+      setUserNameState(name);
+      await AsyncStorage.setItem('user_name', name);
+  };
+
+  const setAvatarId = async (id: string) => {
+      setAvatarIdState(id);
+      await AsyncStorage.setItem('user_avatar', id);
+  };
+
   return (
     <PlayerContext.Provider value={{
       currentSong,
@@ -477,7 +517,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       repeatMode,
       isShuffle,
       toggleRepeat,
-      toggleShuffle
+      toggleShuffle,
+      userName,
+      setUserName,
+      avatarId,
+      setAvatarId
     }}>
       {children}
     </PlayerContext.Provider>

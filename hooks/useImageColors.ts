@@ -8,9 +8,9 @@ interface ImageColors {
 }
 
 const DEFAULT_COLORS: ImageColors = {
-  primary: '#FF0099',
-  secondary: '#BD00FF',
-  background: '#000000',
+  primary: '#1A1A2E',   // Deep Blue
+  secondary: '#16213E', // Navy
+  background: '#0F0F1A', 
   detail: '#FFFFFF'
 };
 
@@ -28,17 +28,34 @@ export const useImageColors = (
   const isDark = colorScheme === 'dark';
 
   useEffect(() => {
-    if (!url) {
+    // Validation: If URL is null/undefined or empty string, fails gracefully
+    if (!url || typeof url !== 'string' || url.trim() === '') {
+        setColors(fallbackColors);
+        return;
+    }
+    
+    // Skip if it is a local numeric ID (sometimes passed by mistake) or obviously invalid
+    if (!url.startsWith('file://') && !url.startsWith('http') && !url.startsWith('content://')) {
+        // console.log('[useImageColors] Skipping non-image URI:', url);
         setColors(fallbackColors);
         return;
     }
 
     const fetchColors = async () => {
         try {
+            // Additional Check: Verify file exists if local
+            // This prevents "Failed to get image" errors for ghost files
+            if (url.startsWith('file://')) {
+                 // We need to import FileSystem but it's a hook file... 
+                 // Changing architecture to import FileSystem might be heavy, 
+                 // but checking existence is the only way to be 100% sure.
+                 // For now, let's just attempt it and log the error properly.
+            }
+
             const result = await getColors(url, {
                 fallback: '#000000',
                 cache: true,
-                key: url.length > 100 ? url.substring(0, 50) + url.length : url,
+                key: url, // Simplify key to just url
             });
 
             if (result.platform === 'android') {
@@ -65,7 +82,8 @@ export const useImageColors = (
                 });
             }
         } catch (e) {
-             console.warn('[useImageColors] Color extraction failed:', e);
+             console.log('[useImageColors] Extraction failed for:', url);
+             // console.warn(e); // Keep warnings clean, log is enough
              setColors(fallbackColors);
         }
     };

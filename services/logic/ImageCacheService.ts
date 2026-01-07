@@ -40,6 +40,36 @@ export class ImageCacheService {
     return uri;
   }
 
+  static async cacheImageFromUri(tempUri: string, songId: string): Promise<string> {
+      await this.ensureDirectoryExists();
+      
+      // Hash context specific to this operation
+      let hash = 0;
+      const input = songId + '_imported';
+      for (let i = 0; i < input.length; i++) {
+        hash = ((hash << 5) - hash) + input.charCodeAt(i);
+        hash |= 0;
+      }
+      
+      // Preserve extension
+      const ext = tempUri.toLowerCase().endsWith('.png') ? '.png' : '.jpg';
+      const filename = `cover_${Math.abs(hash).toString(16)}_${Date.now()}${ext}`;
+      const destUri = this.CACHE_DIR + filename;
+
+      try {
+          // Move from temp to persistent
+          await FileSystem.moveAsync({
+              from: tempUri,
+              to: destUri
+          });
+          return destUri;
+      } catch (e) {
+          console.warn('[ImageCache] Failed to move temp image to persistent cache', e);
+          // Fallback: Just return tempUri (better than nothing for this session)
+          return tempUri;
+      }
+  }
+
   static async clearCache() {
       try {
         await FileSystem.deleteAsync(this.CACHE_DIR, { idempotent: true });

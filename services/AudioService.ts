@@ -18,7 +18,8 @@ class AudioService {
     onStatusUpdate: ((status: any) => void) | null = null;
     
     // Internal Lock for concurrency
-    private loadingLock: Promise<void> = Promise.resolve();
+    private _mutex: Promise<void> = Promise.resolve();
+    private currentRequestId: number = 0;
 
     constructor() {
         this.configureAudioMode();
@@ -39,6 +40,9 @@ class AudioService {
                 playThroughEarpieceAndroid: false,
                 shouldDuckAndroid: true,
             });
+
+            // Notification Permission is now handled in PermissionScreen.tsx
+            // Only strictly necessary native configuration here.
         } catch (error) {
             console.error('[AudioService] Error configuring audio mode', error);
         }
@@ -59,21 +63,31 @@ class AudioService {
      * Prevents race conditions and handles M4A/Large file nuances.
      */
     async loadSound(uri: string, shouldPlay: boolean = true, songId?: string, filename?: string): Promise<boolean> {
-        // 1. Acquire Lock
-        const release = await this.acquireLock();
+        // 1. Validated Request ID
+        this.currentRequestId++;
+        const requestId = this.currentRequestId;
+
+        // 2. Acquire Mutex Lock (Strict Queue)
+        const release = await this.acquireMutex();
         
         try {
+            // Check if superseded while waiting for lock
+            if (this.currentRequestId !== requestId) {
+                 console.log(`[AudioService] Request #${requestId} aborted (Stale).`);
+                 return false;
+            }
+
             this.setState('LOADING');
             this.error = null;
 
-            // 2. Unload existing
+            // 3. Unload existing
             await this.unloadInternal();
             
             this.currentUri = uri;
             const decodedUri = decodeURIComponent(uri);
             const contextLabel = filename || songId || 'Unknown Asset';
 
-            console.log(`[AudioService] Loading: ${decodedUri} (${contextLabel})`);
+            console.log(`[AudioService] Request #${requestId}: Loading: ${decodedUri} (${contextLabel})`);
 
             let sourceUri = decodedUri;
             const isContent = uri.startsWith('content://');
@@ -82,54 +96,61 @@ class AudioService {
             // STRATEGY:
             // 1. 'content://' URIs (Scoped Storage) often fail seeking/duration on Android Exoplayer
             // 2. M4A files: MUST be transcoded to MP3 for stable playback (fixes freezing at 0:00)
-            if (isContent || isM4A) {
-                 try {
-                     console.log(`[AudioService] VLOG: ${isM4A ? 'M4A' : 'Content'} detected. Processing via copyToCache...`);
-                     sourceUri = await this.copyToCache(uri);
-                     console.log(`[AudioService] VLOG: Final Source URI: ${sourceUri}`);
-                 } catch (err) {
-                     console.warn('[AudioService] VLOG: Pre-load processing failed:', err);
-                 }
-            } else {
-                 console.log('[AudioService] VLOG: Standard file detected. Playing directly.');
-            }
-
-            // 3. Prepare Source
-            const source = { uri: sourceUri };
+                    if ((isM4A || isContent) && sourceUri === decodedUri) {
+                        try {
+                            console.log(`[AudioService] VLOG: ${isM4A ? 'M4A' : 'Content'} detected. Processing via prewarmUri...`);
+                            
+                            // PRE-CHECK: If we already have a cached/transcoded version, use it immediately
+                            sourceUri = await this.prewarmUri(uri);
+                            
+                            // CHECK STALENESS AFTER ASYNC OP
+                            if (this.currentRequestId !== requestId) {
+                                console.log(`[AudioService] Request #${requestId} aborted after transcoding.`);
+                                return false; 
+                            }
+                        } catch (err) {
+                            console.warn('[AudioService] VLOG: Pre-load processing failed:', err);
+                        }
+                    } else {
+                        console.log('[AudioService] VLOG: Standard file detected. Playing directly.');
+                    }
             
-            try {
-                const { sound, status } = await Audio.Sound.createAsync(
-                    source,
-                    { 
-                        shouldPlay: true, // AUTO-PLAY: Restore standard behavior
-                        progressUpdateIntervalMillis: 250,
-                        positionMillis: 0, 
-                        shouldCorrectPitch: false, // KEEP FALSE: High-res audio often crashes with pitch correction
-                        isLooping: false,
-                        volume: 1.0,
-                    }, 
-                    this._onPlaybackStatusUpdate
-                );
-                this.sound = sound;
-                
-                if (status.isLoaded) {
-                    this.duration = status.durationMillis || 0;
-                    this.position = status.positionMillis;
-                    this.setState('READY');
-                    
-                    // console.log('[AudioService] VLOG: Asset loaded. Auto-play should handle start.');
-                    return true;
-                }
-            } catch (initialError: any) {
-                // RETRY STRATEGY: If direct/initial load failed, and we haven't tried copying yet (or it failed silently), try again hard.
-                console.warn(`[AudioService] VLOG: Initial load failed for ${sourceUri}:`, initialError.message);
-                
-                if ((isM4A || isContent) && sourceUri === decodedUri) {
-                    console.log('[AudioService] VLOG: Retrying M4A with local cache copy...');
-                    try {
-                        sourceUri = await this.copyToCache(uri);
-                        const { sound, status } = await Audio.Sound.createAsync(
-                             { uri: sourceUri },
+             // 4. Prepare Source
+             const source = { uri: sourceUri };
+ 
+             try {
+                 const { sound, status } = await Audio.Sound.createAsync(
+                     source,
+                     { 
+                         shouldPlay: true, // AUTO-PLAY: Restore standard behavior
+                         progressUpdateIntervalMillis: 250,
+                         positionMillis: 0, 
+                         shouldCorrectPitch: false, // KEEP FALSE: High-res audio often crashes with pitch correction
+                         isLooping: false,
+                         volume: 1.0,
+                     }, 
+                     this._onPlaybackStatusUpdate
+                 );
+                 this.sound = sound;
+                 
+                 if (status.isLoaded) {
+                     this.duration = status.durationMillis || 0;
+                     this.position = status.positionMillis;
+                     this.setState('READY');
+                     
+                     // console.log('[AudioService] VLOG: Asset loaded. Auto-play should handle start.');
+                     return true;
+                 }
+             } catch (initialError: any) {
+                 // RETRY STRATEGY: If direct/initial load failed, and we haven't tried copying yet (or it failed silently), try again hard.
+                 console.warn(`[AudioService] VLOG: Initial load failed for ${sourceUri}:`, initialError.message);
+                 
+                 if ((isM4A || isContent) && sourceUri === decodedUri) {
+                     console.log('[AudioService] VLOG: Retrying M4A with local cache copy...');
+                     try {
+                         sourceUri = await this.prewarmUri(uri);
+                         const { sound, status } = await Audio.Sound.createAsync(
+                              { uri: sourceUri },
                              { 
                                  shouldPlay: false,
                                  progressUpdateIntervalMillis: 250,
@@ -186,7 +207,7 @@ class AudioService {
      * Unload current sound safely.
      */
     async unload() {
-        const release = await this.acquireLock();
+        const release = await this.acquireMutex();
         try {
             await this.unloadInternal();
             this.setState('IDLE');
@@ -324,39 +345,40 @@ class AudioService {
         }
     }
 
-    // Concurrency Lock
-    private acquireLock(): Promise<() => void> {
+    // True Mutex Lock
+    private acquireMutex(): Promise<() => void> {
         let release: () => void;
         const newLock = new Promise<void>(resolve => release = resolve);
         
-        // Chain to previous lock
-        const obtained = this.loadingLock.then(() => release);
-        this.loadingLock = this.loadingLock.then(() => newLock);
+        // Append to the end of the chain
+        const previousLock = this._mutex;
+        this._mutex = previousLock.then(() => newLock);
         
-        return Promise.resolve(() => {
-            // Wait for previous to finish (which happens instantly when the chain processes)
-            // But we specifically return the releaser for THIS step
+        return previousLock.then(() => {
             return release;
         });
     }
 
     // Fallback Cache for Stubborn M4A/Content URIs
     // NOW ENHANCED WITH TRANSCODING
-    private async copyToCache(uri: string): Promise<string> {
+    // PUBLIC API: Allow LibraryManager to pre-transcode files in background
+    public async prewarmUri(uri: string): Promise<string> {
         // Create a simple deterministic hash from the URI to ensure we reuse the same cache file
         const simpleHash = uri.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a }, 0);
         const safeHash = Math.abs(simpleHash).toString(16);
         
         const filename = uri.split('/').pop() || `temp_${safeHash}`;
         
-        // Target is ALWAYS .mp3 now for M4A files because we transcode
-        let ext = '.mp3';
+        // Target is ALWAYS .m4a now because libmp3lame is missing on some android builds
+        // We transcode ALAC/Other M4A -> AAC-LC (M4A) which plays perfectly on Android.
+        let ext = '.m4a';
         const lowerName = filename.toLowerCase();
         const lowerUri = uri.toLowerCase();
         let needsTranscoding = false;
 
+        // Force transcode for M4A/ALAC to ensure AAC-LC (Android-friendly)
         if (lowerName.endsWith('.m4a') || lowerUri.endsWith('.m4a') || lowerUri.includes('.m4a')) {
-             ext = '.mp3';
+             ext = '.m4a';
              needsTranscoding = true; 
         } else if (lowerName.endsWith('.flac') || lowerUri.endsWith('.flac')) {
              ext = '.flac';
@@ -383,18 +405,33 @@ class AudioService {
         console.log(`[AudioService] VLOG: Cache MISS. Preparing... Dest: ${dest}`);
 
         if (needsTranscoding) {
-            console.log('[AudioService] 🛠️ Starting FFmpeg Transcoding (M4A -> MP3)...');
+            console.log('[AudioService] 🛠️ Starting FFmpeg Transcoding (ALAC -> AAC)...');
             const startTime = Date.now();
             
-            // FFmpeg needs a valid input file path. standard copy first if it's content://
+            // FFmpeg Protection: Always copy to a safe temp file. 
+            // This bypasses issues with spaces, special characters, and native permission scopes.
+            const tempInput = `${FileSystem.cacheDirectory}ffmpeg_in_${safeHash}.m4a`;
             let inputPath = uri;
-            if (uri.startsWith('content://')) {
-                  const tempInput = `${FileSystem.cacheDirectory}temp_input_${safeHash}.m4a`;
-                  await FileSystem.copyAsync({ from: uri, to: tempInput });
-                  inputPath = tempInput;
+
+            try {
+                // Formatting source for FileSystem.copyAsync
+                let copySource = uri;
+                if (!uri.startsWith('file://') && !uri.startsWith('content://') && uri.startsWith('/')) {
+                    copySource = `file://${uri}`;
+                }
+
+                await FileSystem.deleteAsync(tempInput, { idempotent: true }).catch(() => {});
+                await FileSystem.copyAsync({ from: copySource, to: tempInput });
+                
+                // Successful copy -> Use safe path
+                inputPath = tempInput;
+                console.log(`[AudioService] Safe input created: ${tempInput}`);
+            } catch (copyErr) {
+                console.warn('[AudioService] Safe copy failed, attempting direct path...', copyErr);
+                // Fallback to original uri (inputPath is already uri)
             }
 
-            // COMMAND: -i input -c:a libmp3lame -q:a 2 output
+            // COMMAND: -i input -c:a aac -q:a 2 output
             // -y overwrite - FFmpeg usually needs raw paths (no file:// prefix)
             try {
                 if (!FFmpegKit) {
@@ -405,8 +442,10 @@ class AudioService {
                 const ffmpegInput = inputPath.replace('file://', '');
                 const ffmpegOutput = dest.replace('file://', '');
                 
-                console.log(`[AudioService] FFmpeg CMD: -i "${ffmpegInput}" "${ffmpegOutput}"`);
-                const session = await FFmpegKit.execute(`-y -i "${ffmpegInput}" -c:a libmp3lame -q:a 5 -preset ultrafast "${ffmpegOutput}"`);
+                console.log(`[AudioService] FFmpeg CMD: -i "${ffmpegInput}" -vn ... "${ffmpegOutput}"`);
+                // ADDED -vn to ignore embedded album art (video stream)
+                // CHANGED -c:a libmp3lame -> -c:a aac (Native Encoder) because libmp3lame is missing
+                const session = await FFmpegKit.execute(`-y -i "${ffmpegInput}" -vn -c:a aac -b:a 192k "${ffmpegOutput}"`);
                 const returnCode = await session.getReturnCode();
                 
                 if (ReturnCode.isSuccess(returnCode)) {

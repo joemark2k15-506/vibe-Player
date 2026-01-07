@@ -1,5 +1,4 @@
 {
-
   "expo": {
     "name": "Vibe Player",
     "slug": "vibe-player",
@@ -21,7 +20,12 @@
         "READ_MEDIA_AUDIO",
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
-        "ACCESS_MEDIA_LOCATION"
+        "ACCESS_MEDIA_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS",
+        "RECORD_AUDIO"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#120924",
@@ -37,13 +41,25 @@
     },
     "plugins": [
       "expo-router",
-
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/vibe_icon.png",
+          "image": "./assets/images/image1.jpg",
           "resizeMode": "cover",
           "backgroundColor": "#000000"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Vibe Player to access your microphone for voice search."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/vibe_icon.png",
+          "color": "#120924"
         }
       ],
       [
@@ -68,6 +84,7 @@
             "kotlinVersion": "1.9.24",
             "gradleVersion": "8.7",
             "usesCleartextTraffic": false,
+            "enableProguardInReleaseBuilds": true,
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "minSdkVersion": 24,
@@ -76,8 +93,13 @@
         }
       ],
       "./withAndroidFFmpeg.js",
-      "expo-font"
-
+      "expo-font",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Vibe Player to access your microphone for voice search."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

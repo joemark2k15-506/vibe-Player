@@ -106,7 +106,7 @@ export default function ParallaxAlbumArt({ uri, size = width * 0.85 }: ParallaxA
                 />
             ) : (
                 <Image 
-                    source={require('../assets/images/img3.png')}
+                    source={require('../assets/images/default_cover.png')}
                     style={styles.image} 
                     contentFit="cover"
                     transition={200}

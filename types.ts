@@ -54,4 +54,9 @@ export interface PlayerContextType {
   isShuffle: boolean;
   toggleRepeat: () => void;
   toggleShuffle: () => void;
+  // User Profile Global State
+  userName: string;
+  setUserName: (name: string) => Promise<void>;
+  avatarId: string;
+  setAvatarId: (id: string) => Promise<void>;
 }

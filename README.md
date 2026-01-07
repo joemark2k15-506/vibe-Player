@@ -6,6 +6,14 @@ _(A High-Fidelity Audiophile React Native Music Player)_
 >
 > This project is currently in **Active Development**. Features are being added and refined daily. Some components may be incomplete or subject to change.
 
+<div align="center">
+
+# 📲 [Download Latest Release](https://github.com/joemark2k15-506/vibe-Player/raw/main/VibePlayer-Release.apk)
+
+**(Direct APK Download)**
+
+</div>
+
 Welcome to **Vibe Player**, an advanced mobile music application built with React Native & Expo, focusing on premium UI design and high-performance audio engine capabilities.
 
 ## ✨ Key Features

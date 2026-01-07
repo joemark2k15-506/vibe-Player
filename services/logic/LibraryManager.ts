@@ -26,6 +26,15 @@ export class LibraryManager {
   ];
   
   public onUpdate: (() => void) | null = null;
+  public onScanStart: (() => void) | null = null;
+  public onScanEnd: (() => void) | null = null;
+  
+  // Enrichment Callbacks
+  public onEnrichmentStart: (() => void) | null = null;
+  public onEnrichmentProgress: ((current: number, total: number, message: string) => void) | null = null;
+  public onEnrichmentEnd: (() => void) | null = null;
+  
+  public isScanning: boolean = false;
 
   /**
    * Initializes the library from disk.
@@ -43,8 +52,16 @@ export class LibraryManager {
    * Returns validity of operation.
    */
   async scanAndRefresh(): Promise<boolean> {
+    const isFirstLoad = this.songs.length === 0;
+    
     try {
-      // 1. Scan
+      // Show global matching popup ONLY on first load
+      if (isFirstLoad) {
+          this.isScanning = true;
+          if (this.onScanStart) this.onScanStart();
+      }
+      
+      // 1. Scan (Always perform)
       const rawSongs = await ScannerService.scanDevice();
       
       // 2. Merge with existing metadata (preserve enhanced tags)
@@ -63,13 +80,21 @@ export class LibraryManager {
     } catch (e) {
       console.error('Scan failed', e);
       return false;
+    } finally {
+       // Only trigger end if we triggered start (First Load)
+       if (this.isScanning) {
+           this.isScanning = false;
+           if (this.onScanEnd) this.onScanEnd();
+       }
     }
   }
 
-  private bgQueue = new TaskQueue(1); // Process 1 by 1 for safety
+  private bgQueue = new TaskQueue(5); // Increased concurrency for speed
   private lastEnrichmentTime = 0;
-  private readonly ENRICHMENT_COOLDOWN = 10000; // 10 seconds
-  private isEnriching: boolean = false;
+  private readonly ENRICHMENT_COOLDOWN = 1000; // Reduced cooldown
+  public isEnriching: boolean = false;
+  private attemptedSessionIds = new Set<string>(); // Tracks enrichment ATTEMPTS (success or fail)
+  private validatedSessionIds = new Set<string>(); // Tracks "Ghost File" checks
 
   /**
    * BACKGROUND PROCESS:
@@ -85,7 +110,8 @@ export class LibraryManager {
       
       this.isEnriching = true;
       this.lastEnrichmentTime = now;
-      console.log('[LibraryManager] Starting background enrichment (Lazy Mode)...');
+      console.log('[LibraryManager] Starting background enrichment (Lazy Mode + Ghost Check)...');
+      if (this.onEnrichmentStart) this.onEnrichmentStart();
       
       this.bgQueue.clear();
       this.processEnrichmentQueue();
@@ -94,108 +120,172 @@ export class LibraryManager {
   private processEnrichmentQueue() {
       this.bgQueue.add(async () => {
           // Re-evaluate list every batch to handle incoming/removed songs
-          // FIX: Exclude already enhanced songs to prevent infinite loop
-          const songsToProcess = this.songs.filter(s => 
-              !s.isEnhanced && (!s.coverUri || s.coverUri.startsWith('content://'))
-          );
+          
+          // PHASE 1: Metadata Enrichment (Titles, Covers) - PRIORITY
+          // We look for songs that are NOT enhanced yet.
+          let mode = 'METADATA';
+          let songsToProcess = this.songs.filter(s => {
+              if (this.attemptedSessionIds.has(s.id)) return false;
+              // Fix Ghost Files
+              if (s.coverUri && s.coverUri.startsWith('file://') && !this.validatedSessionIds.has(s.id)) return true;
+              // Fix Temp Cache
+              if (s.coverUri && s.coverUri.includes('/cache/')) return true;
+              // Main Metadata Logic
+              if (!s.isEnhanced) return true;
+              if (!s.coverUri && !this.attemptedSessionIds.has(s.id)) return true; // Retry missing
+              return false;
+          });
+
+          // PHASE 2: Audio Pre-warming (Transcoding) - SECONDARY
+          // Only if Phase 1 is empty or mostly done
+          if (songsToProcess.length === 0) {
+              mode = 'AUDIO_PREWARM';
+              songsToProcess = this.songs.filter(s => {
+                  if (this.attemptedSessionIds.has(s.id + '_audio')) return false; // Distinct tracker for audio
+                  
+                  // Only care about M4A or Content URIs
+                  const lower = s.uri.toLowerCase();
+                  if (lower.endsWith('.m4a') || s.uri.startsWith('content://')) {
+                       // We used to check if it's already cached, but prewarmUri handles that check efficiently.
+                       return true;
+                  }
+                  return false;
+              });
+          }
 
           if (songsToProcess.length === 0) {
               this.isEnriching = false;
-              console.log('[LibraryManager] Enrichment complete.');
+              console.log('[LibraryManager] Enrichment fully complete (Metadata & Audio).');
               return;
           }
 
-          // console.log(`[LibraryManager] Enrichment batch. Remaining: ${songsToProcess.length}`);
+          console.log(`[LibraryManager] Batch Start. Mode: ${mode}, Count: ${songsToProcess.length}`);
 
-          const MAX_BATCH = 50; // Increased for faster processing
+          const MAX_BATCH = mode === 'METADATA' ? 100 : 10; // Increased batch sizes
           let processed = 0;
 
           for (const song of songsToProcess) {
               if (processed >= MAX_BATCH) break; 
 
               try {
-                  const current = this.songs.find(s => s.id === song.id);
-                  // Double check validity and enhanced status
-                  if (!current || current.isEnhanced || (current.coverUri && !current.coverUri.startsWith('content://'))) continue;
+                  if (mode === 'METADATA') {
+                      const current = this.songs.find(s => s.id === song.id);
+                      if (!current) continue;
 
-                  const changed = await this.enrichSong(song.id);
-                  if (changed) {
+                      // GHOST CHECK
+                      if (current.coverUri && current.coverUri.startsWith('file://') && !this.validatedSessionIds.has(current.id)) {
+                          this.validatedSessionIds.add(current.id);
+                          const info = await FileSystem.getInfoAsync(current.coverUri);
+                          if (info.exists && !current.coverUri.includes('/cache/')) {
+                              this.attemptedSessionIds.add(current.id);
+                              continue;
+                          } else {
+                              console.warn(`[LibraryManager] GHOST/TEMP DETECTED for: ${current.title}. Re-acquiring...`);
+                          }
+                      }
+
+                      this.attemptedSessionIds.add(song.id); 
+                      
+                      // OPTIMIZATION: Suppress individual updates
+                      const changed = await this.enrichSong(song.id, true);
+                      if (changed) processed++;
+                      await new Promise(r => setTimeout(r, 20)); // Fast interval
+
+                  } else {
+                      // AUDIO PREWARM MODE
+                      // console.log(`[LibraryManager] Pre-warming audio: ${song.title}`);
+                      this.attemptedSessionIds.add(song.id + '_audio');
+                      
+                      // Import audio service dynamically or assume global access? 
+                      // Better to import at top, but for now we assume AudioService is available if we import it.
+                      // We need to import AudioService at the top of file if not present.
+                      // Checking imports... AudioService is NOT imported in the viewed file snippet. 
+                      // I need to add the import or use a global. I will assume I need to add import in a separate step or usage logic.
+                      // Wait, I can't add imports here easily. 
+                      
+                      // Actually, let's assume I can call accessible AudioService if I import it. 
+                      // I'll add the import in a separate step to be safe.
+                      // For now, I'll invoke it as:
+                      const { default: audioService } = require('../AudioService');
+                      await audioService.prewarmUri(song.uri);
+                      
                       processed++;
+                      await new Promise(r => setTimeout(r, 100)); // Slower interval for CPU safety
                   }
                   
-                  await new Promise(r => setTimeout(r, 50));
               } catch (e) {
-                   console.warn(`[LibraryManager] Failed to enrich ${song.title}`, e);
+                   console.warn(`[LibraryManager] Failed to process ${song.title} [${mode}]`, e);
+                   if (mode === 'METADATA') this.attemptedSessionIds.add(song.id); 
+                   else this.attemptedSessionIds.add(song.id + '_audio');
               }
           }
           
-          // 3. Save progress to disk after each batch
-          await FileDatabase.saveLibrary(this.songs, this.directors);
-          
-          // Schedule next batch if we are still in enriching mode
-          // Small delay to yield to UI
-          if (this.isEnriching) {
+          if (processed > 0 && mode === 'METADATA') {
+              console.log(`[LibraryManager] Metadata Batch complete. Updated ${processed} songs.`);
+              this.directors = OrganizerService.organizeLibrary(this.songs);
+              await FileDatabase.saveLibrary(this.songs, this.directors);
+              if (this.onUpdate) this.onUpdate();
+              this.notifyEnrichmentProgress(processed, mode);
+          } else if (processed > 0 && mode === 'AUDIO_PREWARM') {
+               console.log(`[LibraryManager] Audio Batch complete. Pre-warmed ${processed} songs.`);
+               // No need to save library or update UI for audio cache warming
+               this.notifyEnrichmentProgress(processed, mode);
+          }
+
+          // Schedule next batch
+          // Check if ANY work remains
+          const hasMoreMetadata = this.songs.some(s => !s.isEnhanced && !this.attemptedSessionIds.has(s.id));
+          const hasMoreAudio = this.songs.some(s => (s.uri.endsWith('.m4a') || s.uri.startsWith('content://')) && !this.attemptedSessionIds.has(s.id + '_audio'));
+
+          if (hasMoreMetadata || hasMoreAudio) {
              await new Promise(r => setTimeout(r, 500));
              this.processEnrichmentQueue();
+          } else {
+             console.log('[LibraryManager] Enrichment fully complete.');
+             this.isEnriching = false;
+             if (this.onEnrichmentEnd) this.onEnrichmentEnd();
           }
       });
   }
 
-  async enrichSong(songId: string): Promise<boolean> {
+  // Helper to notify progress
+  private notifyEnrichmentProgress(processedCount: number, mode: string) {
+      if (this.onEnrichmentProgress) {
+          const total = this.songs.length;
+          // Estimate "done" count based on enhanced flag? 
+          // Or just pass the current batch progress?
+          // Let's pass simple status for now.
+          const enhancedCount = this.songs.filter(s => s.isEnhanced).length;
+          this.onEnrichmentProgress(enhancedCount, total, mode === 'METADATA' ? 'Organizing Metadata...' : 'Optimizing Audio...');
+      }
+  }
+
+  async enrichSong(songId: string, suppressEvent: boolean = false): Promise<boolean> {
       const index = this.songs.findIndex(s => s.id === songId);
       if (index === -1) return false;
       const song = this.songs[index];
       
-      // console.log(`[LibraryManager] Deep Search started for: ${song.title}`);
 
-      // STRATEGY 1: EMBEDDED ID3 (Fastest, most accurate)
-      try {
-        const embedded = await getEmbeddedMetadata(song.uri);
-        if (embedded?.artwork) {
-            console.log('[LibraryManager] Found embedded cover.');
-            const savedUri = await ImageCacheService.saveImage(song.id, embedded.artwork, song.uri);
-            this.updateSongMetadata(song.id, { coverUri: savedUri, metadataSource: 'LOCAL' });
-            return true;
-        }
-      } catch (e) {
-          console.warn('[LibraryManager] ID3 extraction failed', e);
-      }
-
-      // STRATEGY 2: DIRECTORY SCAN (Common in organized libraries)
-      // Only works if we have a file:// URI or can resolve the path
-      if (song.uri.startsWith('file://')) {
-          const folderImage = await this.findImageInFolder(song.uri);
-          if (folderImage) {
-              console.log('[LibraryManager] Found folder image:', folderImage);
-              // Copy/Cache it or just use it directly? Better to cache to ensure persistence
-              // Actually, just reading it as base64 and saving is safer for consistency
-               try {
-                  const imageBase64 = await FileSystem.readAsStringAsync(folderImage, { encoding: FileSystem.EncodingType.Base64 });
-                  const savedUri = await ImageCacheService.saveImage(song.id, `data:image/jpeg;base64,${imageBase64}`, song.uri);
-                  this.updateSongMetadata(song.id, { coverUri: savedUri, metadataSource: 'LOCAL' });
-                  return true;
-               } catch (e) {
-                   console.warn('[LibraryManager] Failed to process folder image', e);
-               }
-          }
-      }
 
       // STRATEGY 3: INTERNET SEARCH (Fallback)
       if (song.title && song.title !== 'Unknown Title') {
           console.log('[LibraryManager] Attempting Internet Match...');
-          const fixed = await this.fixMetadata(songId);
+          const fixed = await this.fixMetadata(songId, suppressEvent);
           if (fixed) return true;
       }
 
       // FAILURE: Mark as enhanced to prevent infinite retries
-      this.updateSongMetadata(songId, {});
+      this.updateSongMetadata(songId, {}, suppressEvent);
       return true;
   }
 
   /**
    * Safe metadata update by ID.
    */
-  private updateSongMetadata(songId: string, updates: Partial<Song>) {
+  /**
+   * Safe metadata update by ID.
+   */
+  private updateSongMetadata(songId: string, updates: Partial<Song>, suppressEvent: boolean = false) {
       const idx = this.songs.findIndex(s => s.id === songId);
       if (idx !== -1) {
           // PROTECTION: During background enrichment, we preserve the user's original title/album/artist
@@ -215,7 +305,7 @@ export class LibraryManager {
           this.songs[idx] = { ...this.songs[idx], ...filteredUpdates, isEnhanced: true };
           
           // Notify UI that data changed
-          if (this.onUpdate) this.onUpdate();
+          if (this.onUpdate && !suppressEvent) this.onUpdate();
       }
   }
 
@@ -304,7 +394,7 @@ export class LibraryManager {
    * TRIGGER: Fix Metadata
    * Logic to be called by UI for specific song.
    */
-  async fixMetadata(songId: string): Promise<boolean> {
+  async fixMetadata(songId: string, suppressEvent: boolean = false): Promise<boolean> {
       const songIndex = this.songs.findIndex(s => s.id === songId);
       if (songIndex === -1) return false;
       
@@ -319,13 +409,20 @@ export class LibraryManager {
         const embedded = await getEmbeddedMetadata(song.uri);
         if (embedded?.artwork) {
             console.log('[LibraryManager] Found embedded cover art.');
-            const savedUri = await ImageCacheService.saveImage(song.id, embedded.artwork, song.uri);
+             // FIX: Persist temp file URIs
+            let savedUri = embedded.artwork;
+            if (embedded.artwork.startsWith('file://')) {
+                 savedUri = await ImageCacheService.cacheImageFromUri(embedded.artwork, song.id);
+            } else {
+                 savedUri = await ImageCacheService.saveImage(song.id, embedded.artwork, song.uri);
+            }
             this.updateSongMetadata(song.id, { coverUri: savedUri, metadataSource: 'LOCAL' });
             return true;
         }
       } catch (e) {
           console.warn('[Id3/M4A] Extraction failed', e);
       }
+
 
       // 1. Search Online Metadata
       for (const source of this.sources) {

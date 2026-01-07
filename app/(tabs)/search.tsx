@@ -10,6 +10,7 @@ import * as Animatable from 'react-native-animatable';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import SettingsModal from '@/components/SettingsModal';
+import { VoiceSearchModal } from '@/components/VoiceSearchModal';
 
 export default function SearchScreen() {
   const { colors, isDark } = useTheme();
@@ -18,6 +19,7 @@ export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [activeTag, setActiveTag] = useState('All');
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
+  const [isVoiceVisible, setIsVoiceVisible] = useState(false);
   const [avatarId, setAvatarId] = useState('1');
 
   useFocusEffect(
@@ -100,6 +102,7 @@ export default function SearchScreen() {
       }}>
         <SafeAreaView style={{ flex: 1 }} edges={['left', 'right', 'bottom']}>
           <View style={styles.contentContainer}>
+
         {/* Search Input */}
         <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
             <Ionicons name="search" size={20} color={colors.textSecondary} />
@@ -111,12 +114,22 @@ export default function SearchScreen() {
                 onChangeText={setQuery}
                 autoCorrect={false}
             />
-            {query.length > 0 && (
+            {query.length > 0 ? (
                 <TouchableOpacity onPress={() => setQuery('')}>
                     <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
+            ) : (
+                <TouchableOpacity onPress={() => setIsVoiceVisible(true)}>
+                    <Ionicons name="mic" size={20} color={colors.primary} />
+                </TouchableOpacity>
             )}
         </View>
+
+        <VoiceSearchModal 
+            visible={isVoiceVisible} 
+            onClose={() => setIsVoiceVisible(false)}
+            onResult={(text) => setQuery(text)}
+        />
 
         {/* Vibe Tags */}
         <View style={styles.tagContainer}>

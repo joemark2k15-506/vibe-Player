@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { cancelAnimation, Easing, FadeIn, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import TextTicker from 'react-native-text-ticker';
 import { useImageColors } from '../hooks/useImageColors';
 import AddToPlaylistModal from './AddToPlaylistModal';
@@ -16,7 +15,13 @@ export default function MiniPlayer() {
   const { currentSong, isPlaying, togglePlayPause, next, position, duration } = usePlayer();
   const { colors, isDark } = useTheme();
   /* New Hook for Dynamic Colors */
-  const { colors: imageColors } = useImageColors(currentSong?.coverUri || currentSong?.artworkUri);
+  // Use a fallback that matches the 'default_music_cover.png' (assuming it's dark/blue/purple)
+  const { colors: imageColors } = useImageColors(currentSong?.coverUri || currentSong?.artworkUri, {
+      primary: '#1A1A2E',
+      secondary: '#E94560', 
+      background: '#0F0F1A',
+      detail: '#FFFFFF'
+  });
   
   // Use primary logic: if we have dynamic colors, use them. Else fallback to theme.
   const accentColor = imageColors?.primary || colors.primary;
@@ -48,21 +53,29 @@ export default function MiniPlayer() {
   const pulse = useSharedValue(1);
 
   useEffect(() => {
-    // Continuous Rotation
-    rotation.value = withRepeat(
-      withTiming(360, { duration: 8000, easing: Easing.linear }), // Slower, smoother spin
-      -1 
-    );
-    // Continuous Breathing
-    pulse.value = withRepeat(
-      withSequence(
-        withTiming(1.1, { duration: 1500 }),
-        withTiming(1.0, { duration: 1500 })
-      ),
-      -1,
-      true // Reverse
-    );
-  }, []);
+    if (isPlaying) {
+        // Reset to 0 to ensure smooth 0->360 loop
+        rotation.value = 0;
+        rotation.value = withRepeat(
+            withTiming(360, { duration: 8000, easing: Easing.linear }), 
+            -1  // Infinite
+        );
+
+        // Continuous Breathing
+        pulse.value = withRepeat(
+            withSequence(
+                withTiming(1.1, { duration: 1500 }),
+                withTiming(1.0, { duration: 1500 })
+            ),
+            -1,
+            true // Reverse
+        );
+    } else {
+        cancelAnimation(rotation);
+        cancelAnimation(pulse);
+        pulse.value = withTiming(1); // Reset scale
+    }
+  }, [isPlaying]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -153,20 +166,21 @@ export default function MiniPlayer() {
              />
         </Animated.View>
 
-        {/* Liquid Glass Surface - OPTIMIZED FOR ANDROID */}
-        {Platform.OS === 'android' ? (
-             <View 
-                style={[
-                    styles.innerContainer, 
-                    { 
-                        borderRadius: borderRadius - 2, 
-                        backgroundColor: isDark ? 'rgba(15,15,20,0.96)' : 'rgba(245,245,250,0.96)', // Solid fallback for performance
-                        overflow: 'hidden',
-                    }
-                ]}
-             >
-                 {/* Re-inject content directly since View doesn't wrap children like BlurView in the same way prop-wise, but here it's just children */}
-                 <View style={[styles.content, !isExpanded && styles.contentSmall]}>
+        {/* Dynamic Island Surface - Adaptive */}
+        <View 
+            style={[
+                styles.innerContainer, 
+                { 
+                    borderRadius: borderRadius, 
+                    backgroundColor: isDark ? '#000000' : '#FFFFFF', // Adaptive Background
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)', // Subtle rim
+                    overflow: 'hidden',
+                }
+            ]}
+        >
+            {/* Re-inject content directly */}
+            <View style={[styles.content, !isExpanded && styles.contentSmall]}>
                     <TouchableOpacity 
                         activeOpacity={0.9}
                         onPress={handleExpand}
@@ -193,7 +207,7 @@ export default function MiniPlayer() {
                                         />
                                     ) : (
                                         <Image 
-                                            source={require('../assets/images/img3.png')}
+                                            source={require('../assets/images/default_cover.png')}
                                             style={styles.coverImage} 
                                             contentFit="cover"
                                             transition={200}
@@ -224,7 +238,7 @@ export default function MiniPlayer() {
                                         />
                                     ) : (
                                         <Image 
-                                            source={require('../assets/images/img3.png')}
+                                            source={require('../assets/images/default_cover.png')}
                                             style={styles.coverImage} 
                                             contentFit="cover"
                                             transition={200}
@@ -309,172 +323,19 @@ export default function MiniPlayer() {
                             onPress={handlePlayPauseSmall} 
                             style={[
                                 styles.smallPlayButton, 
-                                { backgroundColor: 'rgba(255,255,255,0.2)', borderColor: 'rgba(255,255,255,0.3)', borderWidth: 0.5 } // Glass Button
+                                { backgroundColor: '#FF4500', borderColor: 'rgba(255,255,255,0.2)', borderWidth: 1 } // Orange Button
                             ]} 
                             hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                         >
-                            <Ionicons name={isPlaying ? "pause" : "play"} size={20} color={isDark ? '#fff' : '#000'} />
+                            <Ionicons name={isPlaying ? "pause" : "play"} size={20} color="#fff" />
                         </TouchableOpacity>
                     )}
                 </View>
 
                 {/* Bottom Progress Bar (Inside Glass) */}
-                <MiniProgressBar position={position} duration={duration} color={accentColor} />
+                <MiniProgressBar position={position} duration={duration} color={'#FF4500'} />
              </View>
-        ) : (
-             <BlurView
-                intensity={95} 
-                tint={isDark ? 'dark' : 'default'}
-                style={[
-                    styles.innerContainer, 
-                    { 
-                        borderRadius: borderRadius - 2, 
-                        backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.45)', 
-                    }
-                ]}
-            >
-                <View style={[styles.content, !isExpanded && styles.contentSmall]}>
-                    <TouchableOpacity 
-                        activeOpacity={0.9}
-                        onPress={handleExpand}
-                        onPressIn={handlePressIn}
-                        onPressOut={handlePressOut}
-                        style={styles.artworkInfoArea}
-                    >
-                        {isExpanded ? (
-                             // LARGE STATIC ARTWORK
-                             <Animated.View 
-                                entering={FadeIn.duration(200)} 
-                                exiting={FadeOut.duration(200)}
-                                style={styles.artworkLargeWrapper}
-                             >
-                                <View style={styles.artworkLarge}>
-                                    {(currentSong?.coverUri || currentSong?.artworkUri) && !imageError ? (
-                                        <Image 
-                                            key={currentSong?.id}
-                                            source={{ uri: currentSong.coverUri || currentSong.artworkUri }} 
-                                            style={styles.coverImage} 
-                                            contentFit="cover"
-                                            onError={() => setImageError(true)}
-                                            transition={200}
-                                        />
-                                    ) : (
-                                        <Image 
-                                            source={require('../assets/images/img3.png')}
-                                            style={styles.coverImage} 
-                                            contentFit="cover"
-                                            transition={200}
-                                        />
-                                    )}
-                                </View>
-                             </Animated.View>
-                        ) : (
-                             // SMALL ROTATING VINYL
-                             <Animated.View 
-                                entering={FadeIn.duration(200)} 
-                                exiting={FadeOut.duration(200)}
-                                style={[styles.artworkSmallWrapper]}
-                             >
-                                <Animated.View style={[
-                                    styles.artworkSmall, 
-                                    animatedStyle,
-                                    { borderWidth: 0 } 
-                                ]}>
-                                    {(currentSong?.coverUri || currentSong?.artworkUri) && !imageError ? (
-                                        <Image 
-                                            key={currentSong?.id}
-                                            source={{ uri: currentSong.coverUri || currentSong.artworkUri }} 
-                                            style={styles.coverImage} 
-                                            contentFit="cover"
-                                            onError={() => setImageError(true)}
-                                            transition={200}
-                                        />
-                                    ) : (
-                                        <Image 
-                                            source={require('../assets/images/img3.png')}
-                                            style={styles.coverImage} 
-                                            contentFit="cover"
-                                            transition={200}
-                                        />
-                                    )}
-                                </Animated.View>
-                             </Animated.View>
-                        )}
-                        
-                        {isExpanded && (
-                            <Animated.View entering={FadeIn.duration(150).delay(50)} exiting={FadeOut.duration(100)} style={styles.info}>
-                                <View style={styles.marqueeContainer}>
-                                    <TextTicker
-                                        key={currentSong?.id}
-                                        style={[styles.title, { color: isDark ? '#fff' : '#000' }]} 
-                                        duration={12000}
-                                        loop
-                                        bounce={false}
-                                        repeatSpacer={50}
-                                        marqueeDelay={1000}
-                                        animationType="scroll"
-                                    >
-                                        {currentSong?.title}
-                                    </TextTicker>
-                                </View>
-                                <Text style={[styles.artist, { color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)' }]} numberOfLines={1}>{currentSong?.artist}</Text>
-                            </Animated.View>
-                        )}
 
-                        {!isExpanded && (
-                            <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(100)} style={styles.smallControlsOverlay}>
-                                {/* Tiny Metadata for Pill */}
-                                <View style={{ flexDirection: 'column', justifyContent: 'center' }}>
-                                    <Text style={[styles.title, { fontSize: 13, color: isDark ? '#fff' : '#000' }]} numberOfLines={1}>
-                                       {currentSong?.title}
-                                    </Text>
-                                    <Text style={[styles.artist, { fontSize: 10, color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)' }]} numberOfLines={1}>
-                                       {currentSong?.artist}
-                                    </Text>
-                                </View>
-                            </Animated.View>
-                        )}
-                    </TouchableOpacity>
-
-                    {isExpanded ? (
-                        <View style={styles.controls}>
-                            <TouchableOpacity 
-                                onPress={() => setShowPlaylistModal(true)} 
-                                style={styles.iconButton}
-                            >
-                                <Ionicons name="heart-outline" size={22} color={isDark ? '#fff' : '#000'} />
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                onPress={togglePlayPause} 
-                                style={[styles.playButton, { backgroundColor: colors.primary }]}
-                            >
-                                <Ionicons name={isPlaying ? "pause" : "play"} size={22} color="white" />
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                onPress={next} 
-                                style={styles.iconButton}
-                            >
-                                <Ionicons name="play-skip-forward" size={24} color={isDark ? '#fff' : '#000'} />
-                            </TouchableOpacity>
-                        </View>
-                    ) : (
-                        <TouchableOpacity 
-                            onPress={handlePlayPauseSmall} 
-                            style={[
-                                styles.smallPlayButton, 
-                                { backgroundColor: 'rgba(255,255,255,0.2)', borderColor: 'rgba(255,255,255,0.3)', borderWidth: 0.5 } // Glass Button
-                            ]} 
-                            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                        >
-                            <Ionicons name={isPlaying ? "pause" : "play"} size={20} color={isDark ? '#fff' : '#000'} />
-                        </TouchableOpacity>
-                    )}
-                </View>
-
-                {/* Bottom Progress Bar (Inside Glass) */}
-                <MiniProgressBar position={position} duration={duration} color={accentColor} />
-            </BlurView>
-        )}
     </Animated.View>
 
     <AddToPlaylistModal 
@@ -538,14 +399,13 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     position: 'absolute',
-    bottom: 0,
-    left: 20,
-    right: 20,
-    height: 3,
+    top: 2,
+    left:0, 
+    right: 0,
+    height: 5, // Thinner, sleek top bar
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 1.5,
     overflow: 'hidden',
-    marginBottom: 6, // Float inside the glass
+    marginTop: 0, // Flush with top edge
   },
   progressFill: {
     height: 3,

@@ -5,9 +5,8 @@ import { useTheme } from '@/components/ThemeContext';
 import { AVATARS, DEFAULT_AVATAR } from '@/constants/avatars';
 import { Fonts } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Dimensions, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Animatable from 'react-native-animatable';
 import Animated, {
@@ -134,15 +133,14 @@ const AnimatedIcon = ({ name, color, size = 24, isDark }: { name: keyof typeof I
 const { width, height } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const { directorCards, play, currentSong } = usePlayer();
+  const { directorCards, play, currentSong, userName, avatarId } = usePlayer();
   const { colors, isDark } = useTheme(); // Added isDark
   const router = useRouter();
   
   /* Greeting Logic - Switched to Icons as Lottie files were duplicates */
   const [greeting, setGreeting] = useState('');
   const [dateStr, setDateStr] = useState('');
-  const [userName, setUserName] = useState('Joe');
-  const [avatarId, setAvatarId] = useState('1');
+  // userName and avatarId are now from Context
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const [greetingIcon, setGreetingIcon] = useState<keyof typeof Ionicons.glyphMap>('sunny');
 
@@ -172,20 +170,8 @@ export default function HomeScreen() {
     const interval = setInterval(updateTime, 60000);
     return () => clearInterval(interval);
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-        const loadProfile = async () => {
-            try {
-                const savedName = await AsyncStorage.getItem('user_name');
-                const savedAvatar = await AsyncStorage.getItem('user_avatar');
-                if (savedName) setUserName(savedName);
-                if (savedAvatar) setAvatarId(savedAvatar);
-            } catch (e) { console.log('Failed to load profile'); }
-        };
-        loadProfile();
-    }, [])
-  );
+  
+  // Removed useFocusEffect - Context handles sync automatically
 
   const renderItem = ({ item }: { item: any }) => (
     <MusicDirectorCard 

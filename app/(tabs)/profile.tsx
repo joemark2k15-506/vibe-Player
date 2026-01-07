@@ -15,15 +15,12 @@ import CreateVibeModal from '../../components/CreateVibeModal';
 
 const { width } = Dimensions.get('window');
 
-export default function ProfileScreen() {
+  export default function ProfileScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const player = usePlayer();
   const play = player?.play || (async () => {});
-  const songs = player?.songs || [];
-  const playlists = player?.playlists || [];
-  const likedSongs = player?.likedSongs || [];
-  const importTestSong = player?.importTestSong || (async () => {});
+  const { songs, playlists, likedSongs, importTestSong, userName, setUserName, avatarId, setAvatarId } = player;
 
   const [isVibeModalVisible, setIsVibeModalVisible] = React.useState(false);
   const [isAvatarModalVisible, setIsAvatarModalVisible] = React.useState(false);
@@ -33,9 +30,8 @@ export default function ProfileScreen() {
     await play();
   };
 
-  const [username, setUsername] = React.useState('Vibe Master');
+  // Name and Avatar come from Context now
   const [bio, setBio] = React.useState('Exploring the sonic universe 🌌');
-  const [avatarId, setAvatarId] = React.useState('1');
   
   const [isEditing, setIsEditing] = React.useState(false);
   const [tempUsername, setTempUsername] = React.useState('');
@@ -47,13 +43,9 @@ export default function ProfileScreen() {
 
   const loadProfile = async () => {
     try {
-      const savedName = await AsyncStorage.getItem('user_name');
+      // Name and Avatar handled by PlayerContext
       const savedBio = await AsyncStorage.getItem('user_bio');
-      const savedAvatar = await AsyncStorage.getItem('user_avatar');
-      
-      if (savedName) setUsername(savedName);
       if (savedBio) setBio(savedBio);
-      if (savedAvatar) setAvatarId(savedAvatar);
     } catch {
       console.error('Failed to load profile');
     }
@@ -64,7 +56,7 @@ export default function ProfileScreen() {
   };
 
   const startEditing = () => {
-      setTempUsername(username);
+      setTempUsername(userName);
       setTempBio(bio);
       setIsEditing(true);
   };
@@ -75,9 +67,8 @@ export default function ProfileScreen() {
           return;
       }
       try {
-          await AsyncStorage.setItem('user_name', tempUsername);
+          await setUserName(tempUsername); // Updates Global Context & Storage
           await AsyncStorage.setItem('user_bio', tempBio);
-          setUsername(tempUsername);
           setBio(tempBio);
           setIsEditing(false);
       } catch {
@@ -86,9 +77,8 @@ export default function ProfileScreen() {
   };
 
   const handleAvatarSelect = async (id: string) => {
-      setAvatarId(id);
+      await setAvatarId(id); // Updates Global Context & Storage
       setIsAvatarModalVisible(false);
-      await AsyncStorage.setItem('user_avatar', id);
       // Alert.alert("Avatar Updated", "Your new vibe connects!"); // Optional feedback
   };
 
@@ -197,7 +187,7 @@ export default function ProfileScreen() {
                     ) : (
                         <View style={{ alignItems: 'center' }}>
                              <TouchableOpacity onPress={startEditing} style={styles.nameRow}>
-                                <Text style={[styles.username, { color: colors.text }]}>{username}</Text>
+                                <Text style={[styles.username, { color: colors.text }]}>{userName}</Text>
                                 <Ionicons name="pencil-outline" size={16} color={colors.primary} style={{ marginLeft: 6, marginTop: 4 }} />
                             </TouchableOpacity>
                             <Text style={[styles.bioText, { color: colors.textSecondary }]}>{bio}</Text>
