@@ -65,7 +65,7 @@ export class M4AParser {
             }
 
         } catch (e) {
-            console.warn('[M4AParser] Smart Scan Error:', e);
+            console.log('[M4AParser] Smart Scan end or minor issue (Safe).');
         }
         return null;
     }

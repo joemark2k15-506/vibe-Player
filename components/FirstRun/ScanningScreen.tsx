@@ -43,6 +43,7 @@ export default function ScanningScreen({ onScanComplete }: ScanningScreenProps) 
         setStatus('Scanning device...');
         
         // 1. Setup listeners for the SECOND phase (Enrichment)
+        // CRITICAL: We now WAIT for this to finish.
         LibraryManager.onEnrichmentProgress = (current, total, message) => {
              setStatus(message);
              setSubStatus(`${current} / ${total}`);
@@ -65,12 +66,13 @@ export default function ScanningScreen({ onScanComplete }: ScanningScreenProps) 
             const finalCount = LibraryManager.getAllSongs().length;
             setCount(finalCount);
             
-            // Check if we need to wait for enrichment
+            // 3. CHECK STATUS
+            // If enrichment is running (which it should be), we just wait for the events above.
             if (LibraryManager.isEnriching) {
                 setStatus('Processing Metadata...');
                 setSubStatus(`0 / ${finalCount}`);
             } else {
-                // If somehow it finished insanely fast or didn't start
+                // Only if enrichment finished instantly (e.g. 0 songs) do we finish here.
                 finishScan();
             }
         } else {

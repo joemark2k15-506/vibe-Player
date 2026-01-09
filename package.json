@@ -70,6 +70,7 @@
     "react-native-screens": "~4.4.0",
     "react-native-tab-view": "^4.2.2",
     "react-native-text-ticker": "^1.14.0",
+    "react-native-track-player": "^4.1.2",
     "react-native-web": "~0.19.13",
     "readable-stream": "^4.7.0"
   },

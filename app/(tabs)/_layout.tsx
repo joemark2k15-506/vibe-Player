@@ -6,7 +6,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useColorScheme } from '../../hooks/use-color-scheme';
 
-import MiniPlayer from '../../components/MiniPlayer';
+import MiniPlayer from '@/components/MiniPlayer';
 
 // Create Swipeable Tab Navigator
 const { Navigator } = createMaterialTopTabNavigator();

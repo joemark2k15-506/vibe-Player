@@ -1,3 +1,5 @@
+import { SharedValue } from 'react-native-reanimated';
+
 export interface Song {
   id: string;
   filename: string;
@@ -32,6 +34,7 @@ export interface PlayerContextType {
   currentSong: Song | null;
   isPlaying: boolean;
   position: number;
+  positionShared: SharedValue<number>;
   duration: number;
   songs: Song[];
   directorCards: DirectorCard[];
@@ -59,4 +62,6 @@ export interface PlayerContextType {
   setUserName: (name: string) => Promise<void>;
   avatarId: string;
   setAvatarId: (id: string) => Promise<void>;
+  accentColor: string;
+  setAccentColor: (color: string) => void;
 }

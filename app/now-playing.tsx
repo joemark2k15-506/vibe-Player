@@ -53,7 +53,7 @@ const EQ_PRESETS = [
 ];
 
 export default function NowPlayingScreen() {
-  const { currentSong, isPlaying, duration, position, togglePlayPause, next, prev, seek, songs, likedSongs, toggleLike, isShuffle, toggleShuffle, repeatMode, toggleRepeat } = usePlayer();
+  const { currentSong, isPlaying, duration, position, positionShared, togglePlayPause, next, prev, seek, songs, likedSongs, toggleLike, isShuffle, toggleShuffle, repeatMode, toggleRepeat } = usePlayer();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -328,15 +328,7 @@ export default function NowPlayingScreen() {
         >
             <View style={styles.progressBarContainer}>
                 <View style={[styles.progressBarBackground, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}>
-                    <LinearGradient
-                        colors={['#FF4E00', '#BD00FF']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={[
-                            styles.progressBarFill,
-                            { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }
-                        ]}
-                    />
+                    <ProgressBarFill positionShared={positionShared} duration={duration} />
                 </View>
                 <Slider
                     style={styles.sliderOverlay}
@@ -547,6 +539,26 @@ export default function NowPlayingScreen() {
     </View>
   );
 }
+
+const ProgressBarFill = React.memo(({ positionShared, duration }: { positionShared: any, duration: number }) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    const progress = duration > 0 ? (positionShared.value / duration) : 0;
+    return {
+      width: `${Math.min(1, Math.max(0, progress)) * 100}%`,
+    };
+  });
+
+  return (
+    <Animated.View style={[styles.progressBarFill, animatedStyle]}>
+        <LinearGradient
+            colors={['#FF4E00', '#BD00FF']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+        />
+    </Animated.View>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {

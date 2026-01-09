@@ -28,7 +28,7 @@ export const extractBasicMetadata = async (uri: string): Promise<NativeMetadata>
     return parseFilename(uri);
 
   } catch (error) {
-    console.warn('[NativeMetadata] Extraction failed, using safe default:', error);
+    console.log('[NativeMetadata] Remote extraction skipped (Using safe default).');
     return { title: 'Unknown Track' };
   }
 };

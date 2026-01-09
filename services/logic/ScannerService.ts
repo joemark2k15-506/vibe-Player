@@ -117,7 +117,7 @@ export class ScannerService {
       metadataSource: 'LOCAL',
       size: 0,
       modificationTime: asset.modificationTime,
-      coverUri: coverUri,
+      coverUri: asset.albumId ? `content://media/external/audio/albumart/${asset.albumId}` : undefined,
       folder: movieName,
       albumId: asset.albumId
     };

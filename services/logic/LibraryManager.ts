@@ -17,23 +17,23 @@ import { MusicDirector, Song } from './Types';
  * - Logic entry point for UI
  */
 export class LibraryManager {
-  
+
   private songs: Song[] = [];
   private directors: MusicDirector[] = [];
   private sources: IMetadataSource[] = [
       new MusicBrainzSource(),
       new iTunesSource()
   ];
-  
+
   public onUpdate: (() => void) | null = null;
   public onScanStart: (() => void) | null = null;
   public onScanEnd: (() => void) | null = null;
-  
+
   // Enrichment Callbacks
   public onEnrichmentStart: (() => void) | null = null;
   public onEnrichmentProgress: ((current: number, total: number, message: string) => void) | null = null;
   public onEnrichmentEnd: (() => void) | null = null;
-  
+
   public isScanning: boolean = false;
 
   /**
@@ -53,17 +53,17 @@ export class LibraryManager {
    */
   async scanAndRefresh(): Promise<boolean> {
     const isFirstLoad = this.songs.length === 0;
-    
+
     try {
       // Show global matching popup ONLY on first load
       if (isFirstLoad) {
           this.isScanning = true;
           if (this.onScanStart) this.onScanStart();
       }
-      
+
       // 1. Scan (Always perform)
       const rawSongs = await ScannerService.scanDevice();
-      
+
       // 2. Merge with existing metadata (preserve enhanced tags)
       this.songs = this.mergeNewScans(rawSongs);
 
@@ -75,7 +75,7 @@ export class LibraryManager {
 
       // 5. Trigger Background Enrichment (Safe Mode via Queue)
       this.startBackgroundEnrichment();
-      
+
       return true;
     } catch (e) {
       console.error('Scan failed', e);
@@ -107,12 +107,12 @@ export class LibraryManager {
           // console.log('[LibraryManager] Enrichment skipped (Busy or Cooldown).');
           return;
       }
-      
+
       this.isEnriching = true;
       this.lastEnrichmentTime = now;
       console.log('[LibraryManager] Starting background enrichment (Lazy Mode + Ghost Check)...');
       if (this.onEnrichmentStart) this.onEnrichmentStart();
-      
+
       this.bgQueue.clear();
       this.processEnrichmentQueue();
   }
@@ -120,7 +120,7 @@ export class LibraryManager {
   private processEnrichmentQueue() {
       this.bgQueue.add(async () => {
           // Re-evaluate list every batch to handle incoming/removed songs
-          
+
           // PHASE 1: Metadata Enrichment (Titles, Covers) - PRIORITY
           // We look for songs that are NOT enhanced yet.
           let mode = 'METADATA';
@@ -142,7 +142,7 @@ export class LibraryManager {
               mode = 'AUDIO_PREWARM';
               songsToProcess = this.songs.filter(s => {
                   if (this.attemptedSessionIds.has(s.id + '_audio')) return false; // Distinct tracker for audio
-                  
+
                   // Only care about M4A or Content URIs
                   const lower = s.uri.toLowerCase();
                   if (lower.endsWith('.m4a') || s.uri.startsWith('content://')) {
@@ -185,7 +185,7 @@ export class LibraryManager {
                       }
 
                       this.attemptedSessionIds.add(song.id); 
-                      
+
                       // OPTIMIZATION: Suppress individual updates
                       const changed = await this.enrichSong(song.id, true);
                       if (changed) processed++;
@@ -195,31 +195,31 @@ export class LibraryManager {
                       // AUDIO PREWARM MODE
                       // console.log(`[LibraryManager] Pre-warming audio: ${song.title}`);
                       this.attemptedSessionIds.add(song.id + '_audio');
-                      
+
                       // Import audio service dynamically or assume global access? 
                       // Better to import at top, but for now we assume AudioService is available if we import it.
                       // We need to import AudioService at the top of file if not present.
                       // Checking imports... AudioService is NOT imported in the viewed file snippet. 
                       // I need to add the import or use a global. I will assume I need to add import in a separate step or usage logic.
                       // Wait, I can't add imports here easily. 
-                      
+
                       // Actually, let's assume I can call accessible AudioService if I import it. 
                       // I'll add the import in a separate step to be safe.
                       // For now, I'll invoke it as:
                       const { default: audioService } = require('../AudioService');
                       await audioService.prewarmUri(song.uri);
-                      
+
                       processed++;
                       await new Promise(r => setTimeout(r, 100)); // Slower interval for CPU safety
                   }
-                  
+
               } catch (e) {
                    console.warn(`[LibraryManager] Failed to process ${song.title} [${mode}]`, e);
-                   if (mode === 'METADATA') this.attemptedSessionIds.add(song.id); 
+                   if (mode === 'METADATA') this.attemptedSessionIds.add(song.id);
                    else this.attemptedSessionIds.add(song.id + '_audio');
               }
           }
-          
+
           if (processed > 0 && mode === 'METADATA') {
               console.log(`[LibraryManager] Metadata Batch complete. Updated ${processed} songs.`);
               this.directors = OrganizerService.organizeLibrary(this.songs);
@@ -264,7 +264,7 @@ export class LibraryManager {
       const index = this.songs.findIndex(s => s.id === songId);
       if (index === -1) return false;
       const song = this.songs[index];
-      
+
 
 
       // STRATEGY 3: INTERNET SEARCH (Fallback)
@@ -292,7 +292,7 @@ export class LibraryManager {
           // unless they were totally unknown or this is a manual FIX trigger.
           const current = this.songs[idx];
           const filteredUpdates = { ...updates };
-          
+
           if (!updates.metadataSource || updates.metadataSource === 'LOCAL') {
               // Internal update or background local enrichment (art/lyrics)
           } else if (updates.metadataSource === 'INTERNET') {
@@ -303,7 +303,7 @@ export class LibraryManager {
           }
 
           this.songs[idx] = { ...this.songs[idx], ...filteredUpdates, isEnhanced: true };
-          
+
           // Notify UI that data changed
           if (this.onUpdate && !suppressEvent) this.onUpdate();
       }
@@ -315,29 +315,29 @@ export class LibraryManager {
           // Generic folders like "Download", "Music", "Bluetooth" should NOT provide shared art.
           const folderUri = fileUri.substring(0, fileUri.lastIndexOf('/'));
           const folderName = folderUri.split('/').pop()?.toLowerCase() || '';
-          
+
           const genericFolders = new Set(['download', 'music', 'audio', 'bluetooth', '0', 'songs', 'internal storage']);
           if (genericFolders.has(folderName)) {
               return null;
           }
 
           const dir = await FileSystem.readDirectoryAsync(folderUri);
-          
+
           // CRITICAL FIX: If the folder has too many audio files (e.g. > 15), 
           // a single "cover.jpg" is likely just a generic file, NOT a specific album cover.
           const audioFiles = dir.filter(f => {
               const e = f.split('.').pop()?.toLowerCase();
               return e && ['mp3', 'm4a', 'wav', 'flac'].includes(e);
           });
-          
+
           if (audioFiles.length > 15) {
               // console.log(`[LibraryManager] Skipping folder art: ${folderName} has too many files (${audioFiles.length})`);
               return null;
           }
-          
+
           // Prioritize common names
           const priorities = ['cover.jpg', 'folder.jpg', 'album.jpg', 'front.jpg', 'artwork.jpg'];
-          
+
           // Case insensitive check
           for (const p of priorities) {
               const match = dir.find(f => f.toLowerCase() === p);
@@ -368,7 +368,7 @@ export class LibraryManager {
    */
   private mergeNewScans(newScans: Song[]): Song[] {
     const existingMap = new Map(this.songs.map(s => [s.id, s])); // Use ID as the primary unique key
-    
+
     return newScans.map(newSong => {
       const existing = existingMap.get(newSong.id);
       if (existing && existing.isEnhanced) {
@@ -389,7 +389,7 @@ export class LibraryManager {
       return newSong;
     });
   }
-  
+
   /**
    * TRIGGER: Fix Metadata
    * Logic to be called by UI for specific song.
@@ -397,7 +397,7 @@ export class LibraryManager {
   async fixMetadata(songId: string, suppressEvent: boolean = false): Promise<boolean> {
       const songIndex = this.songs.findIndex(s => s.id === songId);
       if (songIndex === -1) return false;
-      
+
       const song = this.songs[songIndex];
       let bestMatch: any = null;
       let highestScore = 0;
@@ -428,7 +428,7 @@ export class LibraryManager {
       for (const source of this.sources) {
           console.log(`[LibraryManager] Querying ${source.name}...`);
           const results = await source.search(song);
-          
+
           for (const result of results) {
               const scoreResult = ScoringService.calculateScore(song, result);
               if (scoreResult.isMatch && scoreResult.totalScore > highestScore) {
@@ -456,12 +456,12 @@ export class LibraryManager {
               metadataSource: 'INTERNET'
           };
           this.updateSongMetadata(song.id, updatedSong);
-          
+
           this.directors = OrganizerService.organizeLibrary(this.songs);
           await FileDatabase.saveLibrary(this.songs, this.directors);
           return true;
       }
-      
+
       // Strategy 3: FOLDER Art (Lowest Priority - Only if folder is specific)
       if (song.uri.startsWith('file://')) {
           const folderImage = await this.findImageInFolder(song.uri);
@@ -476,8 +476,8 @@ export class LibraryManager {
               }
           }
       }
-      
-      console.warn('[LibraryManager] No confident match found.');
+
+      // console.warn('[LibraryManager] No confident match found.');
       this.updateSongMetadata(song.id, {});
       return false;
   }

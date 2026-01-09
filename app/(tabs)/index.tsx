@@ -201,7 +201,10 @@ export default function HomeScreen() {
         <SafeAreaView style={{ flex: 1 }} edges={['left', 'right', 'bottom']}>
             
             {/* 1. Fixed Sticky Header - Pushed down to clear Floating Navbar */}
-            <View style={[styles.header, { paddingTop: 110, height: 280, backgroundColor: 'transparent' }]}>
+            <View 
+                pointerEvents="box-none"
+                style={[styles.header, { paddingTop: 110, height: 280, backgroundColor: 'transparent' }]}
+            >
                 
                 {/* Row 1: Top Bar (Avatar, Greeting & Settings) */}
                 <View style={styles.topRow}>

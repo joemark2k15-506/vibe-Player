@@ -18,7 +18,7 @@ export class Id3Parser {
             // Check for ID3 signature (relaxed: scan first 128 bytes in case of garbage)
             let id3Offset = headerBuffer.indexOf('ID3');
             if (id3Offset === -1 || id3Offset > 128) {
-                console.warn(`[Id3Parser] ID3 Header not found in first 128 bytes. Magic: ${headerBuffer.subarray(0, 3).toString()}`);
+                // console.log(`[Id3Parser] ID3 Header not found (Raw MPEG?). Magic: ${headerBuffer[0]},${headerBuffer[1]},${headerBuffer[2]}`);
                 return null;
             }
             console.log(`[Id3Parser] Found ID3 header at offset ${id3Offset}`);
@@ -80,13 +80,14 @@ export class Id3Parser {
                     const frameBody = buffer.subarray(pos + headerSize, pos + headerSize + frameSize);
                     // Await the now-async file writer
                     metadata.artwork = await this.parseApic(frameBody, version);
-                } else if (['TIT2', 'TT2', 'TPE1', 'TP1', 'TCOM', 'TCM'].includes(frameId)) {
+                } else if (['TIT2', 'TT2', 'TPE1', 'TP1', 'TALB', 'TAL', 'TCOM', 'TCM'].includes(frameId)) {
                     const frameBody = buffer.subarray(pos + headerSize, pos + headerSize + frameSize);
                     const text = this.parseText(frameBody);
                     
                     if (text) {
                         if (frameId === 'TIT2' || frameId === 'TT2') metadata.title = text;
                         if (frameId === 'TPE1' || frameId === 'TP1') metadata.artist = text;
+                        if (frameId === 'TALB' || frameId === 'TAL') metadata.album = text;
                         if (frameId === 'TCOM' || frameId === 'TCM') metadata.director = text;
                     }
                 }
@@ -95,7 +96,7 @@ export class Id3Parser {
             }
             
         } catch (e) {
-            console.warn('[Id3Parser] Error:', e);
+            console.log('[Id3Parser] Reader end or issue (Safe).');
         }
         return Object.keys(metadata).length > 0 ? metadata : null;
     }
@@ -190,7 +191,7 @@ export class Id3Parser {
                      imageStart = foundStart;
                 }
             } else {
-                 console.warn(`[Id3Parser] Warning: No Magic Bytes (FF D8 / 89 50) found in scan window! Using default offset ${offset}.`);
+                 console.log('[Id3Parser] Info: No image magic bytes in initial scan window.');
             }
 
             const imageBuffer = buffer.subarray(imageStart);
@@ -221,7 +222,7 @@ export class Id3Parser {
             return fileUri;
             
         } catch (e) {
-            console.warn('[Id3Parser] APIC parse error', e);
+            console.log('[Id3Parser] APIC parse end or issue.');
             return null;
         }
     }

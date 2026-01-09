@@ -12,8 +12,9 @@ import { usePlayer } from './PlayerContext';
 import { useTheme } from './ThemeContext';
 
 export default function MiniPlayer() {
-  const { currentSong, isPlaying, togglePlayPause, next, position, duration } = usePlayer();
+  const { currentSong, isPlaying, togglePlayPause, next, prev, position, duration } = usePlayer();
   const { colors, isDark } = useTheme();
+  
   /* New Hook for Dynamic Colors */
   // Use a fallback that matches the 'default_music_cover.png' (assuming it's dark/blue/purple)
   const { colors: imageColors } = useImageColors(currentSong?.coverUri || currentSong?.artworkUri, {
@@ -22,10 +23,10 @@ export default function MiniPlayer() {
       background: '#0F0F1A',
       detail: '#FFFFFF'
   });
-  
+
   // Use primary logic: if we have dynamic colors, use them. Else fallback to theme.
   const accentColor = imageColors?.primary || colors.primary;
-  
+
   // Create an animated background color derived from the image
   // We'll use a standard LinearGradient for now, but we'll animate the props via reanimated in a more advanced step if needed.
   // For standard "Chameleon", swapping the colors array is enough as LinearGradient doesn't support native driver color interpolation easily without reanimated wrapper.
@@ -35,6 +36,9 @@ export default function MiniPlayer() {
   const router = useRouter();
   const pathname = usePathname();
   const [imageError, setImageError] = useState(false);
+
+  // Use Shared Value for smooth progress
+  const { positionShared } = usePlayer(); // Destructure positionShared
 
   const formatTime = (millis: number) => {
     if (!millis) return "0:00";
@@ -46,7 +50,7 @@ export default function MiniPlayer() {
   useEffect(() => {
     setImageError(false);
   }, [currentSong?.id, currentSong?.coverUri, currentSong?.artworkUri]);
-  
+
   // 1. ROTATION (Vinyl Spin)
   const rotation = useSharedValue(0);
   // 2. PULSE (Breathing Glow)
@@ -115,7 +119,7 @@ export default function MiniPlayer() {
       router.push('/now-playing');
     }
   };
-  
+
   useEffect(() => {
       let timer: NodeJS.Timeout;
       if (isExpanded) {
@@ -247,7 +251,7 @@ export default function MiniPlayer() {
                                 </Animated.View>
                              </Animated.View>
                         )}
-                        
+
                         {isExpanded && (
                             <Animated.View entering={FadeIn.duration(150).delay(50)} exiting={FadeOut.duration(100)} style={styles.info}>
                                 <View style={styles.marqueeContainer}>
@@ -305,6 +309,14 @@ export default function MiniPlayer() {
                             >
                                 <Ionicons name="heart-outline" size={22} color={isDark ? '#fff' : '#000'} />
                             </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                onPress={prev} 
+                                style={styles.iconButton}
+                            >
+                                <Ionicons name="play-skip-back" size={24} color={isDark ? '#fff' : '#000'} />
+                            </TouchableOpacity>
+
                             <TouchableOpacity 
                                 onPress={togglePlayPause} 
                                 style={[styles.playButton, { backgroundColor: colors.primary }]}
@@ -333,7 +345,7 @@ export default function MiniPlayer() {
                 </View>
 
                 {/* Bottom Progress Bar (Inside Glass) */}
-                <MiniProgressBar position={position} duration={duration} color={'#FF4500'} />
+                <MiniProgressBar positionShared={positionShared} duration={duration} color={'#FF4500'} />
              </View>
 
     </Animated.View>
@@ -347,11 +359,17 @@ export default function MiniPlayer() {
   );
 }
 
-const MiniProgressBar = React.memo(({ position, duration, color }: { position: number, duration: number, color: string }) => {
-  const progress = duration > 0 ? (position / duration) : 0;
+const MiniProgressBar = React.memo(({ positionShared, duration, color }: { positionShared: any, duration: number, color: string }) => {
+  const animatedProgressStyle = useAnimatedStyle(() => {
+    const progress = duration > 0 ? (positionShared.value / duration) : 0;
+    return {
+        width: `${Math.min(1, Math.max(0, progress)) * 100}%`
+    };
+  });
+
   return (
     <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(100)} style={styles.progressContainer}>
-      <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: color }]} />
+      <Animated.View style={[styles.progressFill, animatedProgressStyle, { backgroundColor: color }]} />
     </Animated.View>
   );
 });

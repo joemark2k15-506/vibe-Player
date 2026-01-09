@@ -15,33 +15,50 @@ import {
     Righteous_400Regular
 } from '@expo-google-fonts/righteous';
 import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
-import { Audio as ExpoAudio } from 'expo-av';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Dimensions, Image, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Dimensions, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { FadeOut } from 'react-native-reanimated';
+import TrackPlayer from 'react-native-track-player';
 import '../shim';
 
-import { ErrorBoundary } from '../components/ErrorBoundary';
-import PermissionScreen from '../components/FirstRun/PermissionScreen';
-import ScanningScreen from '../components/FirstRun/ScanningScreen';
-import { GlobalBackground } from '../components/GlobalBackground';
-import { PlayerProvider } from '../components/PlayerContext';
-import { ScanningPopup } from '../components/ScanningPopup';
-import { ThemeProvider, useTheme } from '../components/ThemeContext';
-import { FirstRunService } from '../services/logic/FirstRunService';
-import LibraryManager from '../services/logic/LibraryManager';
+// Register TrackPlayer playback service
+// @ts-ignore
+if (!global.isTrackPlayerRegistered) {
+  try {
+    if (TrackPlayer && typeof TrackPlayer.registerPlaybackService === 'function') {
+      TrackPlayer.registerPlaybackService(() => require('../services/TrackPlayerService'));
+      // @ts-ignore
+      global.isTrackPlayerRegistered = true;
+    }
+  } catch (e) {
+    console.warn('[RootLayout] TrackPlayer registration failed (likely missing native module):', e);
+  }
+}
+
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import PermissionScreen from '@/components/FirstRun/PermissionScreen';
+import ScanningScreen from '@/components/FirstRun/ScanningScreen';
+import { GlobalBackground } from '@/components/GlobalBackground';
+import { PlayerProvider } from '@/components/PlayerContext';
+import { ScanningPopup } from '@/components/ScanningPopup';
+import { ThemeProvider, useTheme } from '@/components/ThemeContext';
+import { FirstRunService } from '@/services/logic/FirstRunService';
+import LibraryManager from '@/services/logic/LibraryManager';
+
+import * as SplashScreen from 'expo-splash-screen';
 
 // 1. NON-BLOCKING SPLASH CONFIG
-// We let the native splash auto-hide immediately to prevent system-level hangs.
-// Our custom JS AnimatedSplashScreen will handle the visual transition.
-// SplashScreen.preventAutoHideAsync().catch(() => {}); 
+// Prevent auto-hide to control transition manually
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
+// ... (rest of imports)
+
+
 
 function RootContent() {
   const { isDark } = useTheme();
@@ -85,6 +102,17 @@ function RootContent() {
                     gestureDirection: 'vertical',
                   }} 
                 />
+
+                <Stack.Screen 
+                  name="notification.click" 
+                  options={{ 
+                    presentation: 'transparentModal', 
+                    animation: 'slide_from_bottom',
+                    headerShown: false,
+                    gestureEnabled: true,
+                    gestureDirection: 'vertical',
+                  }} 
+                />
                 
                 <Stack.Screen 
                   name="settings" 
@@ -105,22 +133,6 @@ function RootContent() {
 
 const { width, height } = Dimensions.get('window');
 
-function AnimatedSplashScreen() {
-  return (
-    <Animated.View 
-      exiting={FadeOut.duration(500)}
-      style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', zIndex: 9999 }]}
-      pointerEvents="none" 
-    >
-       <Image 
-        source={require('../assets/images/image1.jpg')} 
-        style={{ width: width, height: height }} 
-        resizeMode="cover"
-       />
-    </Animated.View>
-  );
-}
-
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     Righteous_400Regular,
@@ -135,14 +147,13 @@ export default function RootLayout() {
   });
 
   const [isReady, setIsReady] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
-  
-  // First Run States
-  const [isFirstRun, setIsFirstRun] = useState<boolean | null>(null); // null = unknown
+  const [isFirstRun, setIsFirstRun] = useState<boolean | null>(null);
   const [step, setStep] = useState<'CHECKING' | 'PERMISSION' | 'SCANNING' | 'HOME'>('CHECKING');
-  
+
   // Legacy global scanning popup for subsequent runs
   const [isLegacyScanning, setIsLegacyScanning] = useState(false);
+
+  const hasStarted = useRef(false);
 
   useEffect(() => {
     LibraryManager.onScanStart = () => setIsLegacyScanning(true);
@@ -151,18 +162,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function prepare() {
+      if (hasStarted.current) return;
+      hasStarted.current = true;
       try {
           console.log('[RootLayout] Starting prepare()...');
           
-          await ExpoAudio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            staysActiveInBackground: true,
-            interruptionModeIOS: 2,
-            playsInSilentModeIOS: true,
-            shouldDuckAndroid: true,
-            interruptionModeAndroid: 2,
-            playThroughEarpieceAndroid: false,
-          });
+          // Keep splash visible for at least 2 seconds for branding
+          await new Promise(resolve => setTimeout(resolve, 2000));
 
           // Check First Run Status
           const complete = await FirstRunService.checkFirstRunComplete();
@@ -175,20 +181,28 @@ export default function RootLayout() {
           } else {
               setStep('PERMISSION');
           }
-
-          if (fontsLoaded) {
-              setIsReady(true);
-              // Hide splash slightly later for smooth transition
-              setTimeout(() => setShowSplash(false), 2500);
-          }
       } catch (e) {
           console.warn('Layout preparation error', e);
-          setIsReady(true);
-          setShowSplash(false);
+          setStep('HOME'); // Fallback
+      } finally {
+        // Hide native splash (transparent), revealing the JS splash (image1.jpg)
+        // effectively making it appear as if image1.jpg was there all along
+        await SplashScreen.hideAsync();
       }
     }
     prepare();
-  }, [fontsLoaded]);
+  }, []);
+
+  // Final readiness trigger
+  useEffect(() => {
+      if (fontsLoaded && step !== 'CHECKING') {
+          // Additional safety delay to ensure image1 is rendered
+          setTimeout(() => {
+              console.log('[RootLayout] Everything ready. Showing app.');
+              setIsReady(true);
+          }, 2500);
+      }
+  }, [fontsLoaded, step]);
 
   // First Run Transition Handlers
   const handlePermissionGranted = () => {
@@ -204,16 +218,17 @@ export default function RootLayout() {
 
   // RENDER LOGIC
   
-  // 1. Splash / Loading Backup
-  if (!isReady || showSplash) {
-       // We keep the splash visible until we determine where to go
-       // But we must render ThemeProvider for safety if our custom splash relies on it (it doesn't currently, but good practice)
+  // 1. Splash / Loading Backup (Simplified)
+  if (!isReady) {
        return (
         <ThemeProvider>
             <View style={{ flex: 1, backgroundColor: '#000000' }}>
                 <StatusBar hidden={true} />
-                <GlobalBackground />
-                <AnimatedSplashScreen />
+                <Animated.Image 
+                    source={require('../assets/images/image1.jpg')}
+                    style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
+                    resizeMode="cover"
+                />
             </View>
         </ThemeProvider>
        );
@@ -232,8 +247,8 @@ export default function RootLayout() {
   if (step === 'SCANNING') {
       return (
           <ThemeProvider>
-              <StatusBar hidden={false} style="light" translucent={true} backgroundColor="transparent" />
-              <ScanningScreen onScanComplete={handleScanComplete} />
+               <StatusBar hidden={false} style="light" translucent={true} backgroundColor="transparent" />
+               <ScanningScreen onScanComplete={handleScanComplete} />
           </ThemeProvider>
       );
   }

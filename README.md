@@ -13,6 +13,13 @@ _(A High-Fidelity Audiophile React Native Music Player)_
 **(Direct APK Download)**
 
 </div>
+<div align="center">
+
+### ✨ New in v1.0.0
+
+**Fixed Lockscreen Controls • Custom Notification Fonts • Optimized Scanning • Native Splash Screen**
+
+</div>
 
 Welcome to **Vibe Player**, an advanced mobile music application built with React Native & Expo, focusing on premium UI design and high-performance audio engine capabilities.
 

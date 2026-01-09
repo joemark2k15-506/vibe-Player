@@ -85,7 +85,7 @@ export const getEmbeddedMetadata = async (uri: string): Promise<Partial<NativeMe
             // 4. Safety Net (Disable jsmediatags)
             // If custom parsers failed, we must NOT call jsmediatags as it crashes with 'overrideMimeType'.
             // We simply resolve with null, allowing the UI to show the filename.
-            console.warn('[MetadataService] Metadata extraction failed or format not supported. Skipping jsmediatags to prevent crash.');
+            console.log('[MetadataService] Local metadata extraction skipped (No tags found).');
             safeResolve(null);
             return;
 

@@ -28,7 +28,10 @@ export default function MusicDirectorCard({ card, onPress, activeSongId }: Props
   const hiddenCount = allSongs.length - displayedSongs.length;
 
   const toggleExpand = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    // Optimization: Skip animation if list is too huge to prevent Android jank
+    if (allSongs.length < 50) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
     setExpanded(!expanded);
   };
 
@@ -46,8 +49,8 @@ export default function MusicDirectorCard({ card, onPress, activeSongId }: Props
             onPress={toggleExpand}
             style={styles.header}
           >
-            <View style={[styles.iconContainer, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-                <Ionicons name="person" size={20} color={colors.text} />
+            <View style={[styles.iconContainer, { backgroundColor: isDark ? 'rgba(0, 228, 255, 0.1)' : 'rgba(255,255,255,0.1)', borderColor: isDark ? 'rgba(0, 228, 255, 0.3)' : 'rgba(255,255,255,0.2)' }]}>
+                <Ionicons name="person" size={20} color={isDark ? '#00E4FF' : colors.text} />
             </View>
             
             <View style={styles.headerContent}>
@@ -59,13 +62,23 @@ export default function MusicDirectorCard({ card, onPress, activeSongId }: Props
                  </Text>
             </View>
             
-            <View style={[styles.expandButton, { borderColor: colors.border }]}>
+            <TouchableOpacity 
+                style={[
+                    styles.expandButton, 
+                    { 
+                        borderColor: '#00E4FF', 
+                        backgroundColor: isDark ? 'rgba(0, 228, 255, 0.15)' : 'rgba(0, 228, 255, 0.08)' 
+                    }
+                ]}
+                onPress={toggleExpand}
+                activeOpacity={0.6}
+            >
                  <Ionicons 
                     name={expanded ? "chevron-up" : "chevron-down"} 
-                    size={18} 
-                    color={colors.textSecondary} 
+                    size={22} 
+                    color="#00E4FF" 
                 />
-            </View>
+            </TouchableOpacity>
           </TouchableOpacity>
     
           {/* Songs List */}
@@ -108,11 +121,21 @@ export default function MusicDirectorCard({ card, onPress, activeSongId }: Props
                  );
             })}
             
-            {hiddenCount > 0 && (
-                <TouchableOpacity onPress={toggleExpand} style={styles.footer}>
-                    <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-                        Show {hiddenCount} More
+            {allSongs.length > 3 && (
+                <TouchableOpacity 
+                    onPress={toggleExpand} 
+                    style={styles.footer}
+                    hitSlop={{ top: 20, bottom: 20, left: 50, right: 50 }}
+                >
+                    <Text style={[styles.footerText, { color: colors.primary }]}>
+                        {expanded ? 'Show Less' : `Show ${hiddenCount} More`}
                     </Text>
+                    <Ionicons 
+                        name={expanded ? "chevron-up" : "chevron-down"} 
+                        size={14} 
+                        color={colors.primary} 
+                        style={{ marginTop: 2 }}
+                    />
                 </TouchableOpacity>
             )}
           </View>
@@ -166,13 +189,12 @@ const styles = StyleSheet.create({
       letterSpacing: 2,
   },
   expandButton: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      borderWidth: 1,
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      borderWidth: 1.5,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(0,0,0,0.2)',
   },
   listContainer: {
       paddingBottom: 16,
@@ -207,14 +229,17 @@ const styles = StyleSheet.create({
       opacity: 0.7,
   },
   footer: {
+      flexDirection: 'row',
       alignItems: 'center',
-      paddingTop: 8,
+      justifyContent: 'center',
+      paddingTop: 12,
+      paddingBottom: 4,
+      gap: 6,
   },
   footerText: {
-      fontFamily: Fonts.montserratSemiBold,
-      fontSize: 11,
+      fontFamily: Fonts.kanitSemiBold,
+      fontSize: 12,
       textTransform: 'uppercase',
       letterSpacing: 1,
-      opacity: 0.8,
   }
 });
